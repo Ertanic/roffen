@@ -1,10 +1,15 @@
 use crate::ResourceRefType;
 use futures_util::stream;
 use http_body_util::StreamBody;
-use hyper::{Request, body::{Bytes, Frame, Incoming}, service::Service, StatusCode};
+use hyper::{
+    Request, StatusCode,
+    body::{Bytes, Frame, Incoming},
+    http::HeaderValue,
+    service::Service,
+};
+use log::trace;
 use matchit::Router;
 use std::{pin::Pin, sync::Arc};
-use log::trace;
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 
@@ -50,19 +55,27 @@ impl Service<Request<Incoming>> for Bulldozer {
                     }
                     ResourceRefType::File(path) => {
                         trace!("found file resource ref: {path:?}");
-                        let file = tokio::fs::File::open(path).await?;
+                        let file = tokio::fs::File::open(&path).await?;
                         let stream = ReaderStream::new(file);
                         let stream: BoxStream = Box::pin(StreamBody::new(
                             stream.filter_map(|buf| if let Ok(buf) = buf { Some(Ok(Frame::data(buf))) } else { None }),
                         ));
                         let body = StreamBody::new(stream);
-                        Ok(Response::new(body))
+                        let mut response = Response::new(body);
+
+                        if let Some(mime) = mime_guess2::from_path(path).first() {
+                            response
+                                .headers_mut()
+                                .insert("Content-Type", HeaderValue::from_str(mime.as_ref()).expect("mime error"));
+                        }
+
+                        Ok(response)
                     }
                 },
                 Err(_) => {
                     trace!("route not found, sending 404");
                     Ok(not_found)
-                },
+                }
             }
         };
 
