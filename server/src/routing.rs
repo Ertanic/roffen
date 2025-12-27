@@ -1,13 +1,10 @@
 use crate::ResourceRefType;
 use futures_util::stream;
 use http_body_util::StreamBody;
-use hyper::{
-    Request,
-    body::{Bytes, Frame, Incoming},
-    service::Service,
-};
+use hyper::{Request, body::{Bytes, Frame, Incoming}, service::Service, StatusCode};
 use matchit::Router;
 use std::{pin::Pin, sync::Arc};
+use log::trace;
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 
@@ -30,17 +27,21 @@ impl Service<Request<Incoming>> for Bulldozer {
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {
+        trace!("getting request {} \"{}\"", req.method(), req.uri().path());
+
         let router = Arc::clone(&self.router);
 
         let result = async move {
             let result = router.at(req.uri().path());
-            let not_found: Response = Response::new(StreamBody::new(Box::pin(stream::once(async {
+            let mut not_found: Response = Response::new(StreamBody::new(Box::pin(stream::once(async {
                 Ok::<Frame<Bytes>, std::io::Error>(Frame::data(Bytes::from("not found")))
             }))));
+            *not_found.status_mut() = StatusCode::NOT_FOUND;
 
             match result {
                 Ok(result) => match result.value {
                     ResourceRefType::Content(content) => {
+                        trace!("found content resource ref");
                         let content = content.clone();
                         let stream = stream::once(async { Ok::<Frame<Bytes>, std::io::Error>(Frame::data(content)) });
                         let stream: BoxStream = Box::pin(stream);
@@ -48,6 +49,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         Ok(Response::new(body))
                     }
                     ResourceRefType::File(path) => {
+                        trace!("found file resource ref: {path:?}");
                         let file = tokio::fs::File::open(path).await?;
                         let stream = ReaderStream::new(file);
                         let stream: BoxStream = Box::pin(StreamBody::new(
@@ -57,7 +59,10 @@ impl Service<Request<Incoming>> for Bulldozer {
                         Ok(Response::new(body))
                     }
                 },
-                Err(_) => Ok(not_found),
+                Err(_) => {
+                    trace!("route not found, sending 404");
+                    Ok(not_found)
+                },
             }
         };
 

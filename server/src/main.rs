@@ -1,15 +1,19 @@
 mod consts;
+mod logs;
 mod routing;
 
 use crate::{
     consts::{CONTENT_FOLDER, PUBLIC_FOLDER},
+    logs::setup_logger,
     routing::Bulldozer,
 };
 use hyper::body::Bytes;
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use matchit::Router;
+use log::{debug, info, trace, warn};
+use matchit::{InsertError, Router};
 use std::{
     env,
+    fs::read,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::Arc,
@@ -23,8 +27,12 @@ enum ResourceRefType {
 
 #[tokio::main]
 async fn main() {
+    setup_logger().expect("unable to start logs");
+
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8084);
     let listener = TcpListener::bind(addr).await.expect("failed to bind");
+
+    info!("listening on {}", addr);
 
     let mut router = Router::new();
     router
@@ -34,6 +42,10 @@ async fn main() {
     let root = get_root();
     let content_folder = root.join(CONTENT_FOLDER);
     let public_folder = content_folder.join(PUBLIC_FOLDER);
+
+    debug!("root: {root:?}");
+    debug!("content folder: {content_folder:?}");
+    debug!("public folder: {public_folder:?}");
 
     let public_folder = load_public(&public_folder).await;
     router.merge(public_folder).expect("unable to merge routes");
@@ -63,9 +75,23 @@ async fn load_public(public_root: &Path) -> Router<ResourceRefType> {
 
     let mut routes = Router::new();
     while let Some(dir) = dirs.pop() {
-        let mut folder_reader = tokio::fs::read_dir(dir).await.expect("failed to read dir");
+        let mut folder_reader = match tokio::fs::read_dir(&dir).await {
+            Ok(reader) => reader,
+            Err(err) => {
+                warn!("unable to read folder {dir:?} because {err}, skipping");
+                continue;
+            }
+        };
+
         while let Ok(Some(entry)) = folder_reader.next_entry().await {
-            let filetype = entry.file_type().await.expect("failed to get file type");
+            let filetype = match entry.file_type().await {
+                Ok(t) => t,
+                Err(err) => {
+                    warn!("unable to get file type of {:?} because {err}, skipping", entry.path());
+                    continue;
+                }
+            };
+
             if filetype.is_dir() {
                 dirs.push(entry.path());
             }
@@ -78,9 +104,14 @@ async fn load_public(public_root: &Path) -> Router<ResourceRefType> {
                     .to_string();
                 let normalized = normalize_route(&name);
 
-                routes
-                    .insert(normalized, ResourceRefType::File(entry.path()))
-                    .expect("unable to add route");
+                match routes.insert(normalized.clone(), ResourceRefType::File(entry.path())) {
+                    Ok(_) => {
+                        trace!("route \"{normalized}\" has been registered");
+                    }
+                    Err(err) => {
+                        warn!("route \"{normalized}\" is not registered because {err}");
+                    }
+                }
             }
         }
     }
