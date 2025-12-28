@@ -1,25 +1,84 @@
 mod consts;
 mod logs;
 mod routing;
+mod utils;
 
 use crate::{
-    consts::{CONTENT_FOLDER, INDEX_FILENAME, PAGES_FOLDER, PUBLIC_FOLDER},
+    consts::{AUTH_COOKIE_NAME, AUTH_EXP, AUTH_FILENAME, CONTENT_FOLDER, INDEX_FILENAME, PAGES_FOLDER, PUBLIC_FOLDER},
     logs::setup_logger,
-    routing::Bulldozer,
+    routing::{Bulldozer, MethodRouter, get, post},
+    utils::{make_bad_request, make_internal_error, make_not_allowed, make_not_found, make_response, make_unauthorized},
 };
-use hyper::body::Bytes;
+use cookie::{Cookie, CookieJar, time::Duration};
+use futures_util::{future::BoxFuture, stream};
+use http_body_util::{BodyExt, Collected, StreamBody};
+use hyper::{
+    Error, Method, Request, StatusCode,
+    body::{Bytes, Frame, Incoming},
+    header::HeaderValue,
+};
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use log::{debug, info, warn};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
+use log::{debug, error, info, trace, warn};
 use matchit::Router;
+use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     env,
+    fmt::{Debug, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::net::TcpListener;
 
-#[derive(Clone)]
+type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
+type Response = hyper::Response<StreamBody<BoxStream>>;
+type ApiCallback = Box<dyn Fn(Request<Incoming>, Arc<AppContext>, Arc<AuthContext>) -> BoxFuture<'static, Response> + Sync + Send>;
+
+#[derive(Debug)]
+struct AppContext {
+    content_folder: PathBuf,
+    public_folder: PathBuf,
+    pages_folder: PathBuf,
+    auth_file: PathBuf,
+}
+
+impl AppContext {
+    pub fn new(root: &Path) -> Self {
+        let content_folder = root.join(CONTENT_FOLDER);
+        let public_folder = content_folder.join(PUBLIC_FOLDER);
+        let pages_folder = content_folder.join(PAGES_FOLDER);
+        let auth_file = content_folder.join(AUTH_FILENAME);
+
+        Self {
+            content_folder,
+            public_folder,
+            pages_folder,
+            auth_file,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct AuthContext {
+    secret: String,
+    users: Vec<UserCredentials>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct JwtPayload {
+    username: String,
+    exp: usize,
+}
+
+#[derive(Deserialize, PartialEq)]
+struct UserCredentials {
+    login: String,
+    password: String,
+}
+
+#[derive(Clone, Debug)]
 struct PageLayout(Arc<PathBuf>);
 
 impl PageLayout {
@@ -46,6 +105,18 @@ enum ResourceRefType {
     File(PathBuf),
     Content(Bytes),
     Page { index: PathBuf, layouts: Vec<PageLayout> },
+    Api(ApiCallback),
+}
+
+impl Debug for ResourceRefType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceRefType::File(path) => write!(f, "{:?}", path),
+            ResourceRefType::Content(content) => write!(f, "{}", String::from_utf8_lossy(content)),
+            ResourceRefType::Page { index, layouts } => write!(f, "path: {index:?}, layouts: {layouts:?}"),
+            ResourceRefType::Api(_) => write!(f, "api handler"),
+        }
+    }
 }
 
 #[tokio::main]
@@ -57,29 +128,23 @@ async fn main() {
 
     info!("listening on {}", addr);
 
-    let mut router = Router::new();
-    router
-        .insert("/", ResourceRefType::Content(Bytes::from_static(b"Hello from roffen!")))
-        .unwrap();
-
     let root = get_root();
-    let content_folder = root.join(CONTENT_FOLDER);
-    let public_folder = content_folder.join(PUBLIC_FOLDER);
-    let pages_folder = content_folder.join(PAGES_FOLDER);
+    let context = Arc::new(AppContext::new(&root));
+    let auth_context = Arc::new(load_auth(&context.auth_file).await);
 
+    debug!("auth context loaded");
     debug!("root: {root:?}");
-    debug!("content folder: {content_folder:?}");
-    debug!("public folder: {public_folder:?}");
-    debug!("pages folder: {pages_folder:?}");
+    debug!("app context: {context:#?}");
 
-    let public_folder = load_public(&public_folder).await;
-    router.merge(public_folder).expect("unable to merge routes");
-
-    let pages_folder = load_pages(&pages_folder).await;
-    router.merge(pages_folder).expect("unable to merge pages");
+    let mut router = MethodRouter::default();
+    router
+        .add(post("/admin/login"), ResourceRefType::Api(Box::new(login)))
+        .expect("failed to register /login route");
+    let router = load_public(&context.public_folder, router).await;
+    let router = load_pages(&context.pages_folder, router).await;
 
     let router = Arc::new(router);
-    let bulldozer = Arc::new(Bulldozer::new(router));
+    let bulldozer = Arc::new(Bulldozer::new(router, context, auth_context));
 
     loop {
         let req = listener.accept().await.expect("failed to accept client");
@@ -98,8 +163,105 @@ async fn main() {
     }
 }
 
-async fn load_pages(pages_root: &Path) -> Router<ResourceRefType> {
-    let mut routes = Router::new();
+fn login(mut _req: Request<Incoming>, _ctx: Arc<AppContext>, auth: Arc<AuthContext>) -> BoxFuture<'static, Response> {
+    let ctx = Arc::clone(&_ctx);
+
+    let cookies = _req
+        .headers()
+        .get_all("Cookie")
+        .iter()
+        .filter_map(|c| {
+            let str = c.to_str().ok()?;
+            let cookie = Cookie::parse(str).ok()?;
+            Some((cookie.name().to_owned(), cookie.value().to_owned()))
+        })
+        .collect::<HashMap<_, _>>();
+
+    let result = async move {
+        if !cookies.is_empty()
+            && let Some(jwt) = cookies.get(AUTH_COOKIE_NAME)
+        {
+            trace!("found jwt");
+            let key = DecodingKey::from_secret(auth.secret.as_bytes());
+            let result = match jsonwebtoken::decode::<JwtPayload>(jwt, &key, &Validation::default()) {
+                Ok(t) => t,
+                Err(err) => {
+                    error!("failed to decode jwt because {err}");
+                    return make_unauthorized();
+                }
+            };
+
+            if result.claims.exp < jiff::Timestamp::now().as_second() as usize {
+                let cookie = Cookie::build((AUTH_COOKIE_NAME, "")).max_age(Duration::seconds(0)).build();
+                let val = HeaderValue::from_str(&cookie.to_string()).expect("unable to build header value");
+                _req.headers_mut().insert("Set-Cookie", val);
+                return make_unauthorized();
+            }
+        }
+
+        if _req.headers().get("Content-Type") != Some(&HeaderValue::from_static("application/json")) {
+            return make_bad_request();
+        }
+
+        let body = match _req.into_body().collect().await {
+            Ok(b) => String::from_utf8_lossy(&b.to_bytes()).to_string(),
+            Err(err) => {
+                error!("failed to collect request body because {err}");
+                return make_internal_error();
+            }
+        };
+
+        let credentials = match serde_json::from_str::<UserCredentials>(&body) {
+            Ok(c) => c,
+            Err(err) => {
+                error!("failed to parse body as json because {err}");
+                return make_bad_request();
+            }
+        };
+
+        for user in &auth.users {
+            if *user != credentials {
+                continue;
+            }
+
+            let now = jiff::Timestamp::now().as_second() as usize;
+            let exp = now + AUTH_EXP;
+            let payload = JwtPayload {
+                username: user.login.to_string(),
+                exp,
+            };
+            let encode_key = EncodingKey::from_secret(auth.secret.as_bytes());
+
+            let jwt = jsonwebtoken::encode(&Header::default(), &payload, &encode_key).expect("failed to encode jwt");
+
+            let cookie = Cookie::build((AUTH_COOKIE_NAME, jwt))
+                .path("/admin")
+                .http_only(true)
+                .max_age(Duration::seconds(exp as i64))
+                .build();
+
+            let mut response = make_response(StatusCode::OK, "authorized");
+
+            let val = HeaderValue::from_str(&cookie.to_string()).expect("unable to build header value");
+            response.headers_mut().insert("Set-Cookie", val);
+
+            return response;
+        }
+
+        make_not_found()
+    };
+
+    Box::pin(result)
+}
+
+async fn load_auth(auth_config_path: &Path) -> AuthContext {
+    let auth_context_content = tokio::fs::read_to_string(&auth_config_path)
+        .await
+        .expect("unable to read auth config file");
+    toml::from_str(&auth_context_content).expect("unable to parse auth config file")
+}
+
+async fn load_pages(pages_root: &Path, mut router: MethodRouter) -> MethodRouter {
     let mut pages = vec![PageDir::new(pages_root.to_path_buf())];
 
     while let Some(page) = pages.pop() {
@@ -164,7 +326,7 @@ async fn load_pages(pages_root: &Path) -> Router<ResourceRefType> {
             layouts,
         };
 
-        match routes.insert(normalized.clone(), resource) {
+        match router.add(get(&normalized), resource) {
             Ok(_) => {
                 debug!("page route {normalized} has been registered")
             }
@@ -174,13 +336,12 @@ async fn load_pages(pages_root: &Path) -> Router<ResourceRefType> {
         }
     }
 
-    routes
+    router
 }
 
-async fn load_public(public_root: &Path) -> Router<ResourceRefType> {
+async fn load_public(public_root: &Path, mut router: MethodRouter) -> MethodRouter {
     let mut dirs = vec![public_root.to_path_buf()];
 
-    let mut routes = Router::new();
     while let Some(dir) = dirs.pop() {
         let mut folder_reader = match tokio::fs::read_dir(&dir).await {
             Ok(reader) => reader,
@@ -211,7 +372,7 @@ async fn load_public(public_root: &Path) -> Router<ResourceRefType> {
                     .to_string();
                 let normalized = normalize_route(&name);
 
-                match routes.insert(normalized.clone(), ResourceRefType::File(entry.path())) {
+                match router.add(get(&normalized), ResourceRefType::File(entry.path())) {
                     Ok(_) => {
                         debug!("route \"{normalized}\" has been registered");
                     }
@@ -223,7 +384,7 @@ async fn load_public(public_root: &Path) -> Router<ResourceRefType> {
         }
     }
 
-    routes
+    router
 }
 
 fn normalize_route(route: &str) -> String {

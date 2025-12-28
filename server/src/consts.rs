@@ -3,3 +3,6 @@ pub const CONTENT_FOLDER: &str = "content";
 pub const PUBLIC_FOLDER: &str = "public";
 pub const PAGES_FOLDER: &str = "pages";
 pub const INDEX_FILENAME: &str = "index.html";
+pub const AUTH_FILENAME: &str = "auth.toml";
+pub const AUTH_EXP: usize = 60 * 60 * 24; // day
+pub const AUTH_COOKIE_NAME: &str = "auth";
