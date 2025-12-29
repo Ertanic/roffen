@@ -103,3 +103,20 @@ pub fn login(mut ctx: ApiContext) -> BoxFuture<'static, Response> {
         make_not_found()
     })
 }
+
+pub fn logout(ctx: ApiContext) -> BoxFuture<'static, Response> {
+    Box::pin(async move {
+        let mut response = if let Some(next) = ctx.query.get("next") {
+            make_see_other(next)
+        }
+        else {
+            make_response(StatusCode::OK, "logged out")
+        };
+
+        let cookie = Cookie::build((AUTH_COOKIE_NAME, "_")).max_age(Duration::seconds(0)).build();
+        let val = HeaderValue::from_str(&cookie.to_string()).expect("unable to build header value");
+        response.headers_mut().insert("Set-Cookie", val);
+
+        response
+    })
+}

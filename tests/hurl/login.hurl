@@ -7,7 +7,7 @@ login: admin
 password: admin
 HTTP 200
 [Asserts]
-header "Set-Cookie" startsWith "auth="
+cookie "{{AUTH_COOKIE_NAME}}" exists
 
 POST {{base}}/admin/login
 [Query]
@@ -18,4 +18,4 @@ password: admin
 HTTP 303
 Location: /admin
 [Asserts]
-header "Set-Cookie" startsWith "auth="
+cookie "{{AUTH_COOKIE_NAME}}" exists

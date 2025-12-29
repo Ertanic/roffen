@@ -2,10 +2,14 @@
 <html lang="en">
 <head>
     {% include "head" %}
+    {% include "styles" %}
 </head>
 <body>
     {% if auth() %}
-        <p>you are authorized</p>
+        {% include "navbar" %}
+        <main>
+            <h1>admin panel</h1>
+        </main>
     {% else %}
         <p>you are not authorized</p>
     {% endif %}

@@ -8,7 +8,7 @@ login: admin
 password: admin
 HTTP 200
 [Captures]
-jwt: cookie "auth"
+jwt: cookie "{{AUTH_COOKIE_NAME}}"
 
 GET {{base}}/admin
 [Cookies]

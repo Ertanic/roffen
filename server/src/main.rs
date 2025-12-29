@@ -8,7 +8,7 @@ mod utils;
 use crate::{
     api::{
         ApiContext,
-        auth::{AuthContext, login},
+        auth::{AuthContext, login, logout},
     },
     consts::{AUTH_FILENAME, CONTENT_FOLDER, PAGES_FOLDER, PUBLIC_FOLDER},
     logs::setup_logger,
@@ -116,6 +116,9 @@ async fn main() {
     router
         .add(post("/admin/login"), ResourceRefType::Api(Box::new(login)))
         .expect("failed to register /login route");
+    router
+        .add(get("/admin/logout"), ResourceRefType::Api(Box::new(logout)))
+        .expect("failed to register /logout route");
     router
         .add(get("/health"), ResourceRefType::Content(Bytes::from("ok")))
         .expect("failed to register /health route");
