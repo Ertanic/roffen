@@ -31,6 +31,8 @@ use std::{
     sync::Arc,
 };
 use tokio::net::TcpListener;
+use url_encoded_data::UrlEncodedData;
+use crate::utils::make_see_other;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -166,6 +168,18 @@ async fn main() {
 fn login(mut _req: Request<Incoming>, _ctx: Arc<AppContext>, auth: Arc<AuthContext>) -> BoxFuture<'static, Response> {
     let ctx = Arc::clone(&_ctx);
 
+    let query = _req
+        .uri()
+        .query()
+        .map(|q| {
+            let mut query = HashMap::new();
+            for (key, value) in q.split('&').map(|s| s.split_once('=').unwrap()) {
+                query.insert(key.to_owned(), value.to_owned());
+            }
+            query
+        })
+        .unwrap_or_default();
+
     let cookies = _req
         .headers()
         .get_all("Cookie")
@@ -195,11 +209,11 @@ fn login(mut _req: Request<Incoming>, _ctx: Arc<AppContext>, auth: Arc<AuthConte
                 let cookie = Cookie::build((AUTH_COOKIE_NAME, "")).max_age(Duration::seconds(0)).build();
                 let val = HeaderValue::from_str(&cookie.to_string()).expect("unable to build header value");
                 _req.headers_mut().insert("Set-Cookie", val);
-                return make_unauthorized();
+                return make_see_other("/admin/login");
             }
         }
 
-        if _req.headers().get("Content-Type") != Some(&HeaderValue::from_static("application/json")) {
+        if _req.headers().get("Content-Type") != Some(&"application/x-www-form-urlencoded".parse().unwrap()) {
             return make_bad_request();
         }
 
@@ -211,13 +225,16 @@ fn login(mut _req: Request<Incoming>, _ctx: Arc<AppContext>, auth: Arc<AuthConte
             }
         };
 
-        let credentials = match serde_json::from_str::<UserCredentials>(&body) {
-            Ok(c) => c,
-            Err(err) => {
-                error!("failed to parse body as json because {err}");
-                return make_bad_request();
-            }
-        };
+        let credentials = UrlEncodedData::parse_str(&body);
+        let username = credentials
+            .get("login")
+            .map(|p| p.first().map(ToString::to_string).unwrap_or_default())
+            .unwrap_or_default();
+        let password = credentials
+            .get("password")
+            .map(|p| p.first().map(ToString::to_string).unwrap_or_default())
+            .unwrap_or_default();
+        let credentials = UserCredentials { login: username, password };
 
         for user in &auth.users {
             if *user != credentials {
@@ -240,7 +257,12 @@ fn login(mut _req: Request<Incoming>, _ctx: Arc<AppContext>, auth: Arc<AuthConte
                 .max_age(Duration::seconds(exp as i64))
                 .build();
 
-            let mut response = make_response(StatusCode::OK, "authorized");
+            let mut response = if let Some(next) = query.get("next") {
+                make_see_other(next)
+            }
+            else {
+                make_response(StatusCode::OK, "authorized")
+            };
 
             let val = HeaderValue::from_str(&cookie.to_string()).expect("unable to build header value");
             response.headers_mut().insert("Set-Cookie", val);

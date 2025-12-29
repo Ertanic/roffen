@@ -1,4 +1,8 @@
-use crate::{AppContext, AuthContext, BoxStream, JwtPayload, ResourceRefType, Response, consts::AUTH_COOKIE_NAME, utils::make_unauthorized};
+use crate::{
+    AppContext, AuthContext, BoxStream, JwtPayload, ResourceRefType, Response,
+    consts::{AUTH_COOKIE_NAME, AUTH_EXP},
+    utils::{make_unauthorized},
+};
 use cookie::Cookie;
 use futures_util::stream;
 use http_body_util::StreamBody;
@@ -14,6 +18,7 @@ use matchit::{Match, Router};
 use std::{collections::HashMap, pin::Pin, sync::Arc};
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
+use crate::utils::make_see_other;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -79,7 +84,11 @@ impl Service<Request<Incoming>> for Bulldozer {
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {
-        trace!("getting request {} \"{}\"", req.method(), req.uri().path());
+        trace!(
+            "getting request {} \"{}\"",
+            req.method(),
+            req.uri().path_and_query().map(|a| a.as_str()).unwrap_or_else(|| req.uri().path())
+        );
 
         let router = Arc::clone(&self.router);
         let ctx = Arc::clone(&self.context);
@@ -128,7 +137,8 @@ impl Service<Request<Incoming>> for Bulldozer {
         };
 
         let result = async move {
-            let result = router.at(MethodRoute::new(method, &path));
+            let path_clone = path.clone();
+            let result = router.at(MethodRoute::new(method.clone(), &path_clone));
             let mut not_found: Response = Response::new(StreamBody::new(Box::pin(stream::once(async {
                 Ok::<Frame<Bytes>, std::io::Error>(Frame::data(Bytes::from("not found")))
             }))));
@@ -170,6 +180,14 @@ impl Service<Request<Incoming>> for Bulldozer {
                     ResourceRefType::Page { index, layouts } => {
                         trace!("found page resource ref: {index:?}");
 
+                        match (method, path.as_str(), &auth) {
+                            (Method::GET, "/admin", None) => {
+                                trace!("found system path, redirecting to login page");
+                                return Ok(make_see_other("/admin/login?next=/admin"));
+                            }
+                            _ => {}
+                        }
+
                         trace!("init template engine...");
                         let mut engine = upon::Engine::new();
 
@@ -196,9 +214,15 @@ impl Service<Request<Incoming>> for Bulldozer {
                                 return Ok(internal_error);
                             }
                         };
-                        let rendered = match template.render(&engine, upon::value! { 
-                            auth: auth
-                        }).to_string() {
+                        let rendered = match template
+                            .render(
+                                &engine,
+                                upon::value! {
+                                    auth: auth
+                                },
+                            )
+                            .to_string()
+                        {
                             Ok(r) => r,
                             Err(err) => {
                                 error!("failed to render {index:?} because {err:#}");
