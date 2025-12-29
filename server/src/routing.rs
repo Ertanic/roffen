@@ -1,24 +1,30 @@
 use crate::{
-    AppContext, AuthContext, BoxStream, JwtPayload, ResourceRefType, Response,
-    consts::{AUTH_COOKIE_NAME, AUTH_EXP},
-    utils::{make_unauthorized},
+    AppContext, AuthContext, BoxStream, ResourceRefType, Response,
+    api::{ApiContext, auth::JwtPayload},
+    consts::AUTH_COOKIE_NAME,
+    utils::{make_internal_error, make_not_found, make_see_other},
 };
 use cookie::Cookie;
 use futures_util::stream;
 use http_body_util::StreamBody;
 use hyper::{
-    Method, Request, StatusCode,
+    HeaderMap, Method, Request,
     body::{Bytes, Frame, Incoming},
     http::HeaderValue,
     service::Service,
 };
 use jsonwebtoken::{DecodingKey, Validation};
-use log::{debug, error, trace, warn};
+use log::{error, trace, warn};
 use matchit::{Match, Router};
-use std::{collections::HashMap, pin::Pin, sync::Arc};
+use std::{
+    collections::HashMap,
+    ops::Deref,
+    pin::Pin,
+    sync::{Arc, LazyLock},
+};
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
-use crate::utils::make_see_other;
+use url_encoded_data::UrlEncodedData;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -91,63 +97,29 @@ impl Service<Request<Incoming>> for Bulldozer {
         );
 
         let router = Arc::clone(&self.router);
-        let ctx = Arc::clone(&self.context);
         let auth_context = Arc::clone(&self.auth);
         let method = req.method().clone();
-        let path = req.uri().path().to_owned();
-
-        let cookies = req
-            .headers()
-            .get_all("Cookie")
-            .iter()
-            .filter_map(|c| {
-                let str = c.to_str().ok()?;
-                let cookie = Cookie::parse(str).ok()?;
-                Some((cookie.name().to_owned(), cookie.value().to_owned()))
+        let uri = req.uri();
+        let path = uri.path().to_owned();
+        let query = uri
+            .query()
+            .map(|s| {
+                UrlEncodedData::parse_str(s)
+                    .iter()
+                    .map(|p| (p.0.to_string(), p.1.to_string()))
+                    .collect::<HashMap<String, String>>()
             })
-            .collect::<HashMap<_, _>>();
-
-        let auth = {
-            let jwt = cookies.get(AUTH_COOKIE_NAME);
-            if let Some(jwt) = jwt {
-                let key = DecodingKey::from_secret(auth_context.secret.as_bytes());
-                let payload = match jsonwebtoken::decode::<JwtPayload>(jwt, &key, &Validation::default()) {
-                    Ok(t) => Some(t),
-                    Err(err) => {
-                        error!("failed to decode jwt because {err}");
-                        None
-                    }
-                };
-
-                if let Some(payload) = payload {
-                    if payload.claims.exp < jiff::Timestamp::now().as_second() as usize {
-                        None
-                    }
-                    else {
-                        Some(payload.claims)
-                    }
-                }
-                else {
-                    None
-                }
-            }
-            else {
-                None
-            }
-        };
+            .unwrap_or_default();
 
         let result = async move {
             let path_clone = path.clone();
             let result = router.at(MethodRoute::new(method.clone(), &path_clone));
-            let mut not_found: Response = Response::new(StreamBody::new(Box::pin(stream::once(async {
-                Ok::<Frame<Bytes>, std::io::Error>(Frame::data(Bytes::from("not found")))
-            }))));
-            *not_found.status_mut() = StatusCode::NOT_FOUND;
 
-            let mut internal_error: Response = Response::new(StreamBody::new(Box::pin(stream::once(async {
-                Ok::<Frame<Bytes>, std::io::Error>(Frame::data(Bytes::from("internal error")))
-            }))));
-            *internal_error.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+            let headers = req.headers().clone();
+            let auth_ctx = Arc::clone(&auth_context);
+            let cookies = Arc::new(LazyLock::new(|| parse_cookies(headers)));
+            let cookies_jwt = Arc::clone(&cookies);
+            let auth = LazyLock::new(move || decode_jwt_from_cookies(&cookies_jwt, &auth_ctx));
 
             match result {
                 Ok(result) => match result.value {
@@ -180,7 +152,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                     ResourceRefType::Page { index, layouts } => {
                         trace!("found page resource ref: {index:?}");
 
-                        match (method, path.as_str(), &auth) {
+                        match (method, path.as_str(), &*auth) {
                             (Method::GET, "/admin", None) => {
                                 trace!("found system path, redirecting to login page");
                                 return Ok(make_see_other("/admin/login?next=/admin"));
@@ -206,27 +178,23 @@ impl Service<Request<Incoming>> for Bulldozer {
                             }
                         }
 
+                        let has_auth = auth.is_some();
+                        engine.add_function("auth", move || has_auth);
+
                         let content = tokio::fs::read_to_string(index).await?;
                         let template = match engine.compile(&content) {
                             Ok(t) => t,
                             Err(err) => {
                                 error!("failed to compile {index:?} because {err:#}");
-                                return Ok(internal_error);
+                                return Ok(make_internal_error());
                             }
                         };
-                        let rendered = match template
-                            .render(
-                                &engine,
-                                upon::value! {
-                                    auth: auth
-                                },
-                            )
-                            .to_string()
-                        {
+
+                        let rendered = match template.render(&engine, upon::value! {}).to_string() {
                             Ok(r) => r,
                             Err(err) => {
                                 error!("failed to render {index:?} because {err:#}");
-                                return Ok(internal_error);
+                                return Ok(make_internal_error());
                             }
                         };
 
@@ -235,18 +203,67 @@ impl Service<Request<Incoming>> for Bulldozer {
                         let body = StreamBody::new(stream);
                         Ok(Response::new(body))
                     }
-                    ResourceRefType::Api(func) => {
-                        let result = func(req, ctx, auth_context).await;
+                    ResourceRefType::Api(callback) => {
+                        let cookies = cookies.deref().deref().clone();
+                        let jwt = auth.clone();
+                        let ctx = ApiContext {
+                            request: req,
+                            query,
+                            cookies,
+                            auth_context,
+                            jwt,
+                        };
+                        let result = callback(ctx).await;
                         Ok(result)
                     }
                 },
                 Err(_) => {
                     trace!("route not found, sending 404");
-                    Ok(not_found)
+                    Ok(make_not_found())
                 }
             }
         };
 
         Box::pin(result)
+    }
+}
+
+fn parse_cookies(headers: HeaderMap) -> HashMap<String, String> {
+    headers
+        .get_all("Cookie")
+        .iter()
+        .filter_map(|c| {
+            let str = c.to_str().ok()?;
+            let cookie = Cookie::parse(str).ok()?;
+            Some((cookie.name().to_owned(), cookie.value().to_owned()))
+        })
+        .collect::<HashMap<_, _>>()
+}
+
+fn decode_jwt_from_cookies(cookies: &HashMap<String, String>, auth_context: &AuthContext) -> Option<JwtPayload> {
+    if let Some(jwt) = cookies.get(AUTH_COOKIE_NAME) {
+        let key = DecodingKey::from_secret(auth_context.secret.as_bytes());
+        let payload = match jsonwebtoken::decode::<JwtPayload>(jwt, &key, &Validation::default()) {
+            Ok(t) => Some(t),
+            Err(err) => {
+                error!("failed to decode jwt because {err}");
+                None
+            }
+        };
+
+        if let Some(payload) = payload {
+            if payload.claims.exp < jiff::Timestamp::now().as_second() as usize {
+                None
+            }
+            else {
+                Some(payload.claims)
+            }
+        }
+        else {
+            None
+        }
+    }
+    else {
+        None
     }
 }

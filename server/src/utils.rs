@@ -1,8 +1,8 @@
 use crate::Response;
-use futures_util::{TryFutureExt, stream};
+use futures_util::stream;
 use http_body_util::StreamBody;
 use hyper::{
-    Method, StatusCode,
+    StatusCode,
     body::{Bytes, Frame},
 };
 
@@ -14,20 +14,12 @@ pub fn make_see_other(url: &str) -> Response {
     response
 }
 
-pub fn make_unauthorized() -> Response {
-    make_response(StatusCode::UNAUTHORIZED, "unauthorized")
-}
-
 pub fn make_not_found() -> Response {
     make_response(StatusCode::NOT_FOUND, "not found")
 }
 
 pub fn make_bad_request() -> Response {
     make_response(StatusCode::BAD_REQUEST, "bad request")
-}
-
-pub fn make_not_allowed(method: Method) -> Response {
-    make_response(StatusCode::METHOD_NOT_ALLOWED, &format!("method {} not allow", method))
 }
 
 pub fn make_internal_error() -> Response {

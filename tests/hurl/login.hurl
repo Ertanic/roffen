@@ -16,6 +16,6 @@ next: /admin
 login: admin
 password: admin
 HTTP 303
-Location: %2Fadmin
+Location: /admin
 [Asserts]
 header "Set-Cookie" startsWith "auth="
