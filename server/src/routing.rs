@@ -1,11 +1,12 @@
 use crate::{
-    AppContext, AuthContext, BoxStream, ResourceRefType, Response,
+    AuthContext, BoxStream, ResourceRefType, Response,
     api::{ApiContext, auth::JwtPayload},
     consts::AUTH_COOKIE_NAME,
     utils::{make_internal_error, make_not_found, make_see_other},
+    vfs::VirtualFS,
 };
 use cookie::Cookie;
-use futures_util::stream;
+use futures_util::{AsyncReadExt, stream};
 use http_body_util::StreamBody;
 use hyper::{
     HeaderMap, Method, Request,
@@ -18,13 +19,13 @@ use log::{error, trace, warn};
 use matchit::{Match, Router};
 use std::{
     collections::HashMap,
-    ops::Deref,
     pin::Pin,
     sync::{Arc, LazyLock},
 };
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
+use vfs::async_vfs::AsyncFileSystem;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -74,13 +75,13 @@ impl MethodRouter {
 
 pub struct Bulldozer {
     router: Arc<MethodRouter>,
-    context: Arc<AppContext>,
     auth: Arc<AuthContext>,
+    vfs: VirtualFS,
 }
 
 impl Bulldozer {
-    pub fn new(router: Arc<MethodRouter>, context: Arc<AppContext>, auth: Arc<AuthContext>) -> Self {
-        Self { router, context, auth }
+    pub fn new(router: Arc<MethodRouter>, auth: Arc<AuthContext>, vfs: VirtualFS) -> Self {
+        Self { router, auth, vfs }
     }
 }
 
@@ -96,6 +97,7 @@ impl Service<Request<Incoming>> for Bulldozer {
             req.uri().path_and_query().map(|a| a.as_str()).unwrap_or_else(|| req.uri().path())
         );
 
+        let vfs = Arc::clone(&self.vfs);
         let router = Arc::clone(&self.router);
         let auth_context = Arc::clone(&self.auth);
         let method = req.method().clone();
@@ -133,10 +135,20 @@ impl Service<Request<Incoming>> for Bulldozer {
                     }
                     ResourceRefType::File(path) => {
                         trace!("found file resource ref: {path:?}");
-                        let file = tokio::fs::File::open(&path).await?;
-                        let stream = ReaderStream::new(file);
+                        let file = match vfs.open_file(path).await {
+                            Ok(f) => f,
+                            Err(err) => {
+                                error!("failed to open {path} file because {err}");
+                                return Ok(make_not_found());
+                            }
+                        };
+
+                        // convert async-std `Read` to tokio `AsyncRead`
+                        let file = tokio_util::compat::FuturesAsyncReadCompatExt::compat(file);
+
+                        let reader = ReaderStream::new(file);
                         let stream: BoxStream = Box::pin(StreamBody::new(
-                            stream.filter_map(|buf| if let Ok(buf) = buf { Some(Ok(Frame::data(buf))) } else { None }),
+                            reader.filter_map(|buf| if let Ok(buf) = buf { Some(Ok(Frame::data(buf))) } else { None }),
                         ));
                         let body = StreamBody::new(stream);
                         let mut response = Response::new(body);
@@ -164,8 +176,22 @@ impl Service<Request<Incoming>> for Bulldozer {
                         let mut engine = upon::Engine::new();
 
                         for layout in layouts {
-                            let content = tokio::fs::read_to_string(&*layout.0).await?;
-                            let filename = layout.0.file_name().unwrap().to_string_lossy();
+                            let mut content = String::new();
+
+                            let mut file = match vfs.open_file(&layout).await {
+                                Ok(f) => f,
+                                Err(err) => {
+                                    error!("failed to open {layout} file because {err}");
+                                    continue;
+                                }
+                            };
+
+                            if let Err(err) = file.read_to_string(&mut content).await {
+                                error!("unable to read {layout} file because {err}");
+                                continue;
+                            }
+
+                            let filename = layout.split('/').next_back().unwrap();
                             let filename_components = filename.split('.').collect::<Vec<_>>();
                             let name = filename_components[..filename_components.len() - 1].join(".");
                             match engine.add_template(name.clone(), content) {
@@ -173,7 +199,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                                     trace!("layout {name} has been registered in template engine");
                                 }
                                 Err(err) => {
-                                    warn!("failed to add layout {name} ({:?}) in template engine because {err}", layout.0);
+                                    warn!("failed to add layout {name} ({layout}) in template engine because {err}");
                                 }
                             }
                         }
@@ -181,7 +207,19 @@ impl Service<Request<Incoming>> for Bulldozer {
                         let has_auth = auth.is_some();
                         engine.add_function("auth", move || has_auth);
 
-                        let content = tokio::fs::read_to_string(index).await?;
+                        let mut content = String::new();
+                        let mut file = match vfs.open_file(index).await {
+                            Ok(f) => f,
+                            Err(err) => {
+                                error!("failed to open {index} file because {err}");
+                                return Ok(make_not_found());
+                            }
+                        };
+                        if let Err(err) = file.read_to_string(&mut content).await {
+                            error!("failed to read {index} file because {err}");
+                            return Ok(make_internal_error());
+                        }
+
                         let template = match engine.compile(&content) {
                             Ok(t) => t,
                             Err(err) => {
@@ -204,7 +242,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         Ok(Response::new(body))
                     }
                     ResourceRefType::Api(callback) => {
-                        let cookies = cookies.deref().deref().clone();
+                        let cookies = (**cookies).clone();
                         let jwt = auth.clone();
                         let ctx = ApiContext {
                             request: req,

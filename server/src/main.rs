@@ -4,26 +4,27 @@ mod logs;
 mod resources;
 mod routing;
 mod utils;
+mod vfs;
 
 use crate::{
     api::{
         ApiContext,
         auth::{AuthContext, login, logout},
     },
-    consts::{AUTH_FILENAME, CONTENT_FOLDER, PAGES_FOLDER, PUBLIC_FOLDER},
+    consts::CONTENT_FOLDER,
     logs::setup_logger,
-    resources::{get_root, load_auth, load_pages, load_public},
+    resources::{ResourceManager, get_root},
     routing::{Bulldozer, MethodRouter, get, post},
+    vfs::{PageLayout, VfsPath, init_vfs},
 };
 use futures_util::{future::BoxFuture, stream};
 use http_body_util::StreamBody;
 use hyper::body::{Bytes, Frame};
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use log::{debug, info};
+use log::info;
 use std::{
     fmt::{Debug, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::net::TcpListener;
@@ -32,55 +33,10 @@ type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>
 type Response = hyper::Response<StreamBody<BoxStream>>;
 type ApiCallback = Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Sync + Send>;
 
-#[derive(Debug)]
-struct AppContext {
-    public_folder: PathBuf,
-    pages_folder: PathBuf,
-    auth_file: PathBuf,
-}
-
-impl AppContext {
-    pub fn new(root: &Path) -> Self {
-        let content_folder = root.join(CONTENT_FOLDER);
-        let public_folder = content_folder.join(PUBLIC_FOLDER);
-        let pages_folder = content_folder.join(PAGES_FOLDER);
-        let auth_file = content_folder.join(AUTH_FILENAME);
-
-        Self {
-            public_folder,
-            pages_folder,
-            auth_file,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct PageLayout(Arc<PathBuf>);
-
-impl PageLayout {
-    pub fn new(path: PathBuf) -> Self {
-        Self(Arc::new(path))
-    }
-}
-
-struct PageDir {
-    path: PathBuf,
-    inherited_layouts: Vec<PageLayout>,
-}
-
-impl PageDir {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            inherited_layouts: vec![],
-        }
-    }
-}
-
 enum ResourceRefType {
-    File(PathBuf),
+    File(VfsPath),
     Content(Bytes),
-    Page { index: PathBuf, layouts: Vec<PageLayout> },
+    Page { index: VfsPath, layouts: Vec<PageLayout> },
     Api(ApiCallback),
 }
 
@@ -105,12 +61,12 @@ async fn main() {
     info!("listening on {}", addr);
 
     let root = get_root();
-    let context = Arc::new(AppContext::new(&root));
-    let auth_context = Arc::new(load_auth(&context.auth_file).await);
+    let content_folder = root.join(CONTENT_FOLDER);
+    let vfs = init_vfs(&content_folder).await;
 
-    debug!("auth context loaded");
-    debug!("root: {root:?}");
-    debug!("app context: {context:#?}");
+    let resources = ResourceManager::new(Arc::clone(&vfs));
+
+    let auth_context = Arc::new(resources.load_auth().await);
 
     let mut router = MethodRouter::default();
     router
@@ -122,11 +78,11 @@ async fn main() {
     router
         .add(get("/health"), ResourceRefType::Content(Bytes::from("ok")))
         .expect("failed to register /health route");
-    let router = load_public(&context.public_folder, router).await;
-    let router = load_pages(&context.pages_folder, router).await;
+    let router = resources.load_public(router).await;
+    let router = resources.load_pages(router).await;
 
     let router = Arc::new(router);
-    let bulldozer = Arc::new(Bulldozer::new(router, context, auth_context));
+    let bulldozer = Arc::new(Bulldozer::new(router, auth_context, vfs));
 
     loop {
         let req = listener.accept().await.expect("failed to accept client");
