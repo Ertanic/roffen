@@ -20,6 +20,7 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
     };
 
     dispatch
+        .filter(|metadata| !metadata.target().starts_with("async_std"))
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} {} {}: {}",
