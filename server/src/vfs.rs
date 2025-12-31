@@ -1,30 +1,41 @@
-use futures_util::{
-    AsyncWrite, Stream,
-    io::{BufReader, Cursor},
-    stream,
-};
-use rust_embed::Embed;
 use std::{
     fmt::{Display, Formatter},
     ops::{Deref, DerefMut},
     path::Path,
     sync::Arc,
-    time::{Duration, UNIX_EPOCH},
 };
-use tree_ds::prelude::{Node, Tree};
-use vfs::{
-    VfsError, VfsFileType, VfsMetadata, VfsResult,
-    async_vfs::{AsyncFileSystem, AsyncOverlayFS, AsyncPhysicalFS, AsyncVfsPath, SeekAndRead},
-    error::VfsErrorKind,
+use vfs::async_vfs::{AsyncOverlayFS, AsyncPhysicalFS, AsyncVfsPath};
+#[cfg(not(debug_assertions))]
+use {
+    futures_util::{
+        AsyncWrite, Stream,
+        io::{BufReader, Cursor},
+        stream,
+    },
+    rust_embed::Embed,
+    std::time::{Duration, UNIX_EPOCH},
+    tree_ds::prelude::{Node, Tree},
+    vfs::{
+        VfsError, VfsFileType, VfsMetadata, VfsResult,
+        async_vfs::{AsyncFileSystem, SeekAndRead},
+        error::VfsErrorKind,
+    },
 };
 
 pub type VirtualFS = Arc<AsyncOverlayFS>;
 
+#[cfg(not(debug_assertions))]
 pub async fn init_vfs(root: &Path) -> VirtualFS {
     tokio::fs::create_dir_all(root).await.expect("unable to create vfs dir");
     let embed_fs = AsyncEmbedFS::new();
     let physical_fs = AsyncPhysicalFS::new(root);
     Arc::new(AsyncOverlayFS::new(&[AsyncVfsPath::new(physical_fs), AsyncVfsPath::new(embed_fs)]))
+}
+
+#[cfg(debug_assertions)]
+pub async fn init_vfs(root: &Path) -> VirtualFS {
+    let physical_fs = AsyncPhysicalFS::new(root);
+    Arc::new(AsyncOverlayFS::new(&[AsyncVfsPath::new(physical_fs)]))
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +61,7 @@ impl Display for PageLayout {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct PageDir {
     pub path: VfsPath,
     pub inherited_layouts: Vec<PageLayout>,
@@ -81,6 +93,18 @@ impl VfsPath {
 
     pub fn strip_prefix(&self, prefix: VfsPath) -> Option<Self> {
         self.0.strip_prefix(&*prefix).map(|prefix| Self(prefix.to_owned()))
+    }
+
+    pub fn starts_with(&self, start: &VfsPath) -> bool {
+        self.0.starts_with(&**start)
+    }
+
+    pub fn filename(&self) -> String {
+        self.0.split('/').next_back().unwrap().to_owned()
+    }
+
+    pub fn parent(&self) -> Option<Self> {
+        self.0.split('/').next_back().map(|parent| Self(parent.to_owned()))
     }
 }
 
@@ -126,21 +150,25 @@ impl AsRef<Path> for VfsPath {
     }
 }
 
+#[cfg(not(debug_assertions))]
 #[derive(Embed)]
 #[folder = "../content"]
 struct Content;
 
+#[cfg(not(debug_assertions))]
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct DirEntry {
     path: String,
     is_dir: bool,
 }
 
+#[cfg(not(debug_assertions))]
 #[derive(Debug)]
 struct AsyncEmbedFS {
     tree: FilesTree,
 }
 
+#[cfg(not(debug_assertions))]
 impl AsyncEmbedFS {
     pub fn new() -> Self {
         let mut tree = FilesTree::new();
@@ -153,6 +181,7 @@ impl AsyncEmbedFS {
     }
 }
 
+#[cfg(not(debug_assertions))]
 #[async_trait::async_trait]
 impl AsyncFileSystem for AsyncEmbedFS {
     async fn read_dir(&self, path: &str) -> VfsResult<Box<dyn Unpin + Stream<Item = String> + Send>> {
@@ -276,9 +305,11 @@ impl AsyncFileSystem for AsyncEmbedFS {
     }
 }
 
+#[cfg(not(debug_assertions))]
 #[derive(Debug)]
 struct FilesTree(Tree<String, DirEntry>);
 
+#[cfg(not(debug_assertions))]
 impl FilesTree {
     pub fn new() -> Self {
         let mut tree = Tree::new(None);

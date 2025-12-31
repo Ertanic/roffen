@@ -5,6 +5,7 @@ mod resources;
 mod routing;
 mod utils;
 mod vfs;
+mod watcher;
 
 use crate::{
     api::{
@@ -16,6 +17,7 @@ use crate::{
     resources::{ResourceManager, get_root},
     routing::{Bulldozer, MethodRouter, get, post},
     vfs::{PageLayout, VfsPath, init_vfs},
+    watcher::init_watcher,
 };
 use futures_util::{future::BoxFuture, stream};
 use http_body_util::StreamBody;
@@ -27,7 +29,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::RwLock};
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -64,9 +66,9 @@ async fn main() {
     let content_folder = root.join(CONTENT_FOLDER);
     let vfs = init_vfs(&content_folder).await;
 
-    let resources = ResourceManager::new(Arc::clone(&vfs));
+    let resources = Arc::new(RwLock::new(ResourceManager::new(Arc::clone(&vfs))));
 
-    let auth_context = Arc::new(resources.load_auth().await);
+    let auth_context = Arc::new(resources.read().await.load_auth().await);
 
     let mut router = MethodRouter::default();
     router
@@ -78,11 +80,13 @@ async fn main() {
     router
         .add(get("/health"), ResourceRefType::Content(Bytes::from("ok")))
         .expect("failed to register /health route");
-    let router = resources.load_public(router).await;
-    let router = resources.load_pages(router).await;
+    let router = resources.read().await.load_public(router).await;
+    let router = resources.read().await.load_pages(router).await;
 
-    let router = Arc::new(router);
-    let bulldozer = Arc::new(Bulldozer::new(router, auth_context, vfs));
+    let router = Arc::new(RwLock::new(router));
+    let bulldozer = Arc::new(Bulldozer::new(Arc::clone(&router), auth_context, vfs));
+
+    init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources));
 
     loop {
         let req = listener.accept().await.expect("failed to accept client");

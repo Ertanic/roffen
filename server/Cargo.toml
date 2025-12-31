@@ -26,3 +26,5 @@ vfs = { version = "0.12.2", features = ["async-vfs"] }
 rust-embed = "8.9.0"
 async-trait = "0.1.89"
 tree-ds = { version = "0.2.0", features = ["async"] }
+notify = { version = "8.2.0", features = ["crossbeam-channel"] }
+crossbeam-channel = "0.5.15"

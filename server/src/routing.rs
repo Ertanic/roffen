@@ -22,6 +22,7 @@ use std::{
     pin::Pin,
     sync::{Arc, LazyLock},
 };
+use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
@@ -71,16 +72,24 @@ impl MethodRouter {
             _ => Err(matchit::MatchError::NotFound),
         }
     }
+
+    pub fn remove(&mut self, route: MethodRoute) {
+        let _ = match route.method {
+            Method::GET => self.get.remove(route.path),
+            Method::POST => self.post.remove(route.path),
+            _ => None,
+        };
+    }
 }
 
 pub struct Bulldozer {
-    router: Arc<MethodRouter>,
+    router: Arc<RwLock<MethodRouter>>,
     auth: Arc<AuthContext>,
     vfs: VirtualFS,
 }
 
 impl Bulldozer {
-    pub fn new(router: Arc<MethodRouter>, auth: Arc<AuthContext>, vfs: VirtualFS) -> Self {
+    pub fn new(router: Arc<RwLock<MethodRouter>>, auth: Arc<AuthContext>, vfs: VirtualFS) -> Self {
         Self { router, auth, vfs }
     }
 }
@@ -115,6 +124,7 @@ impl Service<Request<Incoming>> for Bulldozer {
 
         let result = async move {
             let path_clone = path.clone();
+            let router = router.read().await;
             let result = router.at(MethodRoute::new(method.clone(), &path_clone));
 
             let headers = req.headers().clone();

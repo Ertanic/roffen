@@ -43,74 +43,92 @@ impl ResourceManager {
         let mut pages = vec![PageDir::new(VfsPath::new(PAGES_FOLDER))];
 
         while let Some(page) = pages.pop() {
-            let mut children = vec![];
-            let mut index_file = None;
-            let mut layouts = vec![];
+            self._load_page(&mut router, &mut pages, page).await
+        }
 
-            let mut page_reader = match self.vfs.read_dir(&page.path).await {
-                Ok(r) => r,
+        router
+    }
+
+    async fn _load_page(&self, router: &mut MethodRouter, pages: &mut Vec<PageDir>, page: PageDir) {
+        let mut children = vec![];
+        let mut index_file = None;
+        let mut layouts = vec![];
+
+        let mut page_reader = match self.vfs.read_dir(&page.path).await {
+            Ok(r) => r,
+            Err(err) => {
+                warn!("unable to read folder {} because {err}, skipping", page.path);
+                return;
+            }
+        };
+
+        while let Some(entry) = page_reader.next().await {
+            let entry = VfsPath::from([page.path.clone(), entry.into()]);
+
+            let filetype = match self.vfs.metadata(&entry).await {
+                Ok(t) => t,
                 Err(err) => {
-                    warn!("unable to read folder {} because {err}, skipping", page.path);
+                    warn!("unable to get file type {entry} because {err}, skipping");
                     continue;
                 }
             };
 
-            while let Some(entry) = page_reader.next().await {
-                let entry = VfsPath::from([page.path.clone(), entry.into()]);
-
-                let filetype = match self.vfs.metadata(&entry).await {
-                    Ok(t) => t,
-                    Err(err) => {
-                        warn!("unable to get file type {entry} because {err}, skipping");
-                        continue;
-                    }
-                };
-
-                if filetype.file_type == VfsFileType::Directory {
-                    children.push(PageDir::new(entry));
+            if filetype.file_type == VfsFileType::Directory {
+                children.push(PageDir::new(entry));
+            }
+            else {
+                let filename = entry.split('/').next_back().unwrap().to_owned();
+                if filename == INDEX_FILENAME {
+                    index_file = Some(entry);
                 }
                 else {
-                    let filename = entry.split('/').next_back().unwrap().to_owned();
-                    if filename == INDEX_FILENAME {
-                        index_file = Some(entry);
-                    }
-                    else {
-                        let layout = PageLayout::new(entry);
-                        layouts.push(layout);
-                    }
-                }
-            }
-
-            while let Some(mut child) = children.pop() {
-                child.inherited_layouts.extend(layouts.iter().cloned());
-                pages.push(child);
-            }
-
-            if index_file.is_none() {
-                warn!("{INDEX_FILENAME} not found in page folder {:?}", page.path);
-                continue;
-            }
-
-            layouts.extend(page.inherited_layouts);
-
-            let resource = ResourceRefType::Page {
-                index: index_file.unwrap(),
-                layouts,
-            };
-
-            let normalized = normalize_route(&page.path.strip_prefix(VfsPath::new(PAGES_FOLDER)).unwrap());
-
-            match router.add(get(&normalized), resource) {
-                Ok(_) => {
-                    debug!("page route {normalized} has been registered")
-                }
-                Err(err) => {
-                    warn!("page route {normalized} is not registered because {err}");
+                    let layout = PageLayout::new(entry);
+                    layouts.push(layout);
                 }
             }
         }
 
-        router
+        while let Some(mut child) = children.pop() {
+            child.inherited_layouts.extend(layouts.iter().cloned());
+            pages.push(child);
+        }
+
+        if index_file.is_none() {
+            warn!("{INDEX_FILENAME} not found in page folder {:?}", page.path);
+            return;
+        }
+
+        layouts.extend(page.inherited_layouts);
+
+        let resource = ResourceRefType::Page {
+            index: index_file.unwrap(),
+            layouts,
+        };
+
+        let normalized = normalize_route(&page.path.strip_prefix(VfsPath::new(PAGES_FOLDER)).unwrap());
+
+        match router.add(get(&normalized), resource) {
+            Ok(_) => {
+                debug!("page route {normalized} has been registered");
+            }
+            Err(err) => {
+                warn!("page route {normalized} is not registered because {err}");
+            }
+        }
+    }
+
+    pub async fn load_page(&self, router: &mut MethodRouter, path: VfsPath) {
+        if let Some(parent) = path.parent() {
+            let mut pages = vec![PageDir::new(parent)];
+
+            while let Some(page) = pages.pop() {
+                self._load_page(router, &mut pages, page.clone()).await;
+                debug!("page {page:?} has been registered");
+            }
+        }
+        else {
+            warn!("unable to load page {path}");
+        }
     }
 
     pub async fn load_public(&self, mut router: MethodRouter) -> MethodRouter {
@@ -168,9 +186,18 @@ fn normalize_route(route: &str) -> String {
 }
 
 pub fn get_root() -> PathBuf {
-    env::current_exe()
+    #[cfg(not(debug_assertions))]
+    let path = env::current_exe()
         .expect("unable to get app path")
         .parent()
         .expect("no app parent dir")
-        .to_path_buf()
+        .to_path_buf();
+
+    #[cfg(debug_assertions)]
+    let path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("unable to get manifest dir"))
+        .parent()
+        .expect("no parent dir")
+        .to_path_buf();
+
+    path
 }

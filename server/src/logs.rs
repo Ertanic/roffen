@@ -19,13 +19,21 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
         dispatch.level(LevelFilter::Info)
     };
 
+    let colors = fern::colors::ColoredLevelConfig::new()
+        .debug(fern::colors::Color::Magenta)
+        .info(fern::colors::Color::Green)
+        .error(fern::colors::Color::Red);
+
     dispatch
-        .filter(|metadata| !metadata.target().starts_with("async_std"))
-        .format(|out, message, record| {
+        .filter(|metadata| {
+            let target = metadata.target();
+            !(target.starts_with("async_std") || target.starts_with("notify"))
+        })
+        .format(move |out, message, record| {
             out.finish(format_args!(
                 "{} {} {}: {}",
                 jiff::Timestamp::now().strftime("%I:%M:%S %d.%m.%Y"),
-                record.level(),
+                colors.color(record.level()),
                 record.target(),
                 message
             ))
