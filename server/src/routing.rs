@@ -2,6 +2,7 @@ use crate::{
     AuthContext, BoxStream, ResourceRefType, Response,
     api::{ApiContext, auth::JwtPayload},
     consts::AUTH_COOKIE_NAME,
+    resources::ResourceManager,
     utils::{make_internal_error, make_not_found, make_see_other},
     vfs::VirtualFS,
 };
@@ -27,6 +28,7 @@ use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
 use vfs::async_vfs::AsyncFileSystem;
+use crate::templates::functions::register_functions;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -34,6 +36,14 @@ pub fn get(path: &str) -> MethodRoute<'_> {
 
 pub fn post(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::POST, path)
+}
+
+pub fn delete(path: &str) -> MethodRoute<'_> {
+    MethodRoute::new(Method::DELETE, path)
+}
+
+pub fn patch(path: &str) -> MethodRoute<'_> {
+    MethodRoute::new(Method::PATCH, path)
 }
 
 #[derive(Debug)]
@@ -52,6 +62,8 @@ impl<'a> MethodRoute<'a> {
 pub struct MethodRouter {
     get: Router<ResourceRefType>,
     post: Router<ResourceRefType>,
+    delete: Router<ResourceRefType>,
+    patch: Router<ResourceRefType>,
 }
 
 impl MethodRouter {
@@ -59,6 +71,8 @@ impl MethodRouter {
         match route.method {
             Method::GET => self.get.insert(route.path, resource),
             Method::POST => self.post.insert(route.path, resource),
+            Method::DELETE => self.delete.insert(route.path, resource),
+            Method::PATCH => self.patch.insert(route.path, resource),
             _ => Err(matchit::InsertError::Conflict {
                 with: format!("no {} method router", route.method),
             }),
@@ -69,6 +83,8 @@ impl MethodRouter {
         match route.method {
             Method::GET => self.get.at(route.path),
             Method::POST => self.post.at(route.path),
+            Method::DELETE => self.delete.at(route.path),
+            Method::PATCH => self.patch.at(route.path),
             _ => Err(matchit::MatchError::NotFound),
         }
     }
@@ -77,6 +93,8 @@ impl MethodRouter {
         let _ = match route.method {
             Method::GET => self.get.remove(route.path),
             Method::POST => self.post.remove(route.path),
+            Method::DELETE => self.delete.remove(route.path),
+            Method::PATCH => self.patch.remove(route.path),
             _ => None,
         };
     }
@@ -86,11 +104,17 @@ pub struct Bulldozer {
     router: Arc<RwLock<MethodRouter>>,
     auth: Arc<AuthContext>,
     vfs: VirtualFS,
+    resources: Arc<RwLock<ResourceManager>>,
 }
 
 impl Bulldozer {
-    pub fn new(router: Arc<RwLock<MethodRouter>>, auth: Arc<AuthContext>, vfs: VirtualFS) -> Self {
-        Self { router, auth, vfs }
+    pub fn new(router: Arc<RwLock<MethodRouter>>, auth: Arc<AuthContext>, vfs: VirtualFS, resources: Arc<RwLock<ResourceManager>>) -> Self {
+        Self {
+            router,
+            auth,
+            vfs,
+            resources,
+        }
     }
 }
 
@@ -106,6 +130,7 @@ impl Service<Request<Incoming>> for Bulldozer {
             req.uri().path_and_query().map(|a| a.as_str()).unwrap_or_else(|| req.uri().path())
         );
 
+        let resources = Arc::clone(&self.resources);
         let vfs = Arc::clone(&self.vfs);
         let router = Arc::clone(&self.router);
         let auth_context = Arc::clone(&self.auth);
@@ -216,6 +241,8 @@ impl Service<Request<Incoming>> for Bulldozer {
 
                         let has_auth = auth.is_some();
                         engine.add_function("auth", move || has_auth);
+                        
+                        register_functions(&mut engine, resources);
 
                         let mut content = String::new();
                         let mut file = match vfs.open_file(index).await {
@@ -259,6 +286,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                             query,
                             cookies,
                             auth_context,
+                            resources,
                             jwt,
                         };
                         let result = callback(ctx).await;

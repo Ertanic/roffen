@@ -6,3 +6,4 @@ pub const INDEX_FILENAME: &str = "index.html";
 pub const AUTH_FILENAME: &str = "auth.toml";
 pub const AUTH_EXP: usize = 60 * 60 * 24; // day
 pub const AUTH_COOKIE_NAME: &str = "auth";
+pub const POSTS_FOLDER: &str = "posts";

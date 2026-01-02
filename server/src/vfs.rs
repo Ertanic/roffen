@@ -1,4 +1,5 @@
 use std::{
+    env,
     fmt::{Display, Formatter},
     ops::{Deref, DerefMut},
     path::Path,
@@ -34,8 +35,15 @@ pub async fn init_vfs(root: &Path) -> VirtualFS {
 
 #[cfg(debug_assertions)]
 pub async fn init_vfs(root: &Path) -> VirtualFS {
-    let physical_fs = AsyncPhysicalFS::new(root);
-    Arc::new(AsyncOverlayFS::new(&[AsyncVfsPath::new(physical_fs)]))
+    let target_content = Path::new(&env::current_exe().unwrap().parent().unwrap()).join("content");
+    tokio::fs::create_dir_all(&target_content).await.expect("unable to create target content dir");
+
+    let target_content = AsyncPhysicalFS::new(target_content);
+    let embed_content = AsyncPhysicalFS::new(root);
+    Arc::new(AsyncOverlayFS::new(&[
+        AsyncVfsPath::new(target_content),
+        AsyncVfsPath::new(embed_content),
+    ]))
 }
 
 #[derive(Clone, Debug)]
@@ -106,11 +114,21 @@ impl VfsPath {
     pub fn parent(&self) -> Option<Self> {
         self.0.split('/').next_back().map(|parent| Self(parent.to_owned()))
     }
+
+    pub fn join(&self, path: impl Into<VfsPath>) -> Self {
+        Self(self.0.clone() + "/" + &path.into())
+    }
 }
 
 impl From<String> for VfsPath {
     fn from(value: String) -> Self {
         Self(value)
+    }
+}
+
+impl From<&str> for VfsPath {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
     }
 }
 

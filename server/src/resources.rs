@@ -1,15 +1,23 @@
 use crate::{
     PageLayout, ResourceRefType,
-    api::auth::AuthContext,
-    consts::{AUTH_FILENAME, INDEX_FILENAME, PAGES_FOLDER, PUBLIC_FOLDER},
+    api::{
+        auth::AuthContext,
+        posts::{Post, PostBody},
+    },
+    consts::{AUTH_FILENAME, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER},
     routing::{MethodRouter, get},
     vfs::{PageDir, VfsPath, VirtualFS},
 };
-use futures_util::AsyncReadExt;
-use log::{debug, warn};
-use std::{env, path::PathBuf};
-use tokio_stream::StreamExt;
-use vfs::{VfsFileType, async_vfs::AsyncFileSystem};
+use futures_util::{AsyncReadExt, AsyncWriteExt, StreamExt, stream, stream::BoxStream};
+use log::{debug, error, warn};
+use ron::ser::PrettyConfig;
+use std::{env, path::PathBuf, sync::Arc};
+use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+
+pub enum GetPostsRequest {
+    Full,
+    Chunk { count: usize, offset: usize },
+}
 
 pub struct ResourceManager {
     vfs: VirtualFS,
@@ -75,13 +83,11 @@ impl ResourceManager {
 
             if filetype.file_type == VfsFileType::Directory {
                 children.push(PageDir::new(entry));
-            }
-            else {
+            } else {
                 let filename = entry.split('/').next_back().unwrap().to_owned();
                 if filename == INDEX_FILENAME {
                     index_file = Some(entry);
-                }
-                else {
+                } else {
                     let layout = PageLayout::new(entry);
                     layouts.push(layout);
                 }
@@ -125,8 +131,7 @@ impl ResourceManager {
                 self._load_page(router, &mut pages, page.clone()).await;
                 debug!("page {page:?} has been registered");
             }
-        }
-        else {
+        } else {
             warn!("unable to load page {path}");
         }
     }
@@ -156,8 +161,7 @@ impl ResourceManager {
 
                 if filetype.file_type == VfsFileType::Directory {
                     dirs.push(entry);
-                }
-                else {
+                } else {
                     let normalized = normalize_route(&entry.strip_prefix(VfsPath::new(PUBLIC_FOLDER)).unwrap());
 
                     match router.add(get(&normalized), ResourceRefType::File(VfsPath::new(entry))) {
@@ -174,13 +178,117 @@ impl ResourceManager {
 
         router
     }
+
+    async fn ensure_posts_folder(&self) -> VfsResult<VfsPath> {
+        let folder = VfsPath::new(POSTS_FOLDER);
+
+        if let Ok(exists) = self.vfs.exists(&folder).await
+            && !exists
+        {
+            self.vfs.create_dir(&folder).await?;
+        }
+
+        Ok(folder)
+    }
+
+    pub async fn save_post(&self, post: &Post) -> VfsResult<()> {
+        let posts_folder = self.ensure_posts_folder().await?;
+
+        let filename = get_post_filename(&post.id);
+        let path = posts_folder.join(filename);
+
+        let content = ron::ser::to_string_pretty(&post.content, PrettyConfig::new().struct_names(true)).unwrap();
+
+        // it is only possible to add to the contents of the file, but not to overwrite it
+        if let Ok(exists) = self.vfs.exists(&path).await && exists {
+            debug!("post file already exists, removing...");
+            self.vfs.remove_file(&path).await?;
+        }
+
+        let mut file = self.vfs.create_file(&path).await?;
+        file.write_all(content.as_bytes()).await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_post(&self, post_id: &str) -> VfsResult<()> {
+        let posts_folder = self.ensure_posts_folder().await?;
+
+        let filename = get_post_filename(post_id);
+        let path = posts_folder.join(filename);
+
+        if let Ok(exists) = self.vfs.exists(&path).await
+            && exists
+        {
+            self.vfs.remove_file(&path).await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn get_posts(&self, request: GetPostsRequest) -> VfsResult<BoxStream<'static, Post>> {
+        let posts_folder = self.ensure_posts_folder().await?;
+        let vfs = VirtualFS::clone(&self.vfs);
+        let mut folder_reader = vfs.read_dir(&posts_folder).await?.collect::<Vec<String>>().await;
+
+        folder_reader.sort();
+
+        let folder_reader = stream::iter(folder_reader.into_iter())
+            .map(move |entry| posts_folder.join(entry))
+            .filter_map(move |entry| {
+                let vfs = Arc::clone(&vfs);
+                async move {
+                    let post = match read_post(vfs, &entry).await {
+                        Ok(post) => post,
+                        Err(err) => {
+                            error!("unable to read post file {entry} because {err}");
+                            return None;
+                        }
+                    };
+                    Some(post)
+                }
+            });
+
+        match request {
+            GetPostsRequest::Full => Ok(Box::pin(folder_reader)),
+            GetPostsRequest::Chunk { count, offset } => Ok(Box::pin(folder_reader.skip(offset * count).take(count))),
+        }
+    }
+
+    pub async fn get_post(&self, post_id: &str) -> VfsResult<Post> {
+        let posts_folder = self.ensure_posts_folder().await?;
+        let filename = get_post_filename(post_id);
+        let filepath = posts_folder.join(filename);
+
+        read_post(self.vfs.clone(), &filepath).await
+    }
+}
+
+async fn read_post(vfs: VirtualFS, filename: &str) -> VfsResult<Post> {
+    let mut content = String::new();
+    vfs.open_file(filename).await?.read_to_string(&mut content).await?;
+
+    let body: PostBody = match ron::from_str(&content) {
+        Ok(body) => body,
+        Err(err) => {
+            error!("unable to read post body {filename} because {err}");
+            return Err(VfsErrorKind::Other(format!("unable to read post body {filename} because {err}")).into());
+        }
+    };
+
+    let id = filename.split('/').next_back().unwrap().split('.').next().unwrap().to_owned();
+
+    Ok(Post { id, content: body })
+}
+
+fn get_post_filename(id: &str) -> String {
+    format!("{}.ron", id)
 }
 
 fn normalize_route(route: &str) -> String {
     if route.starts_with("/") {
         route.to_string()
-    }
-    else {
+    } else {
         "/".to_owned() + route
     }
 }

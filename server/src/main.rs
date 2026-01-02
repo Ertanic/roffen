@@ -6,16 +6,18 @@ mod routing;
 mod utils;
 mod vfs;
 mod watcher;
+mod templates;
 
 use crate::{
     api::{
         ApiContext,
         auth::{AuthContext, login, logout},
+        posts::{create_post, delete_post, get_posts, update_post},
     },
     consts::CONTENT_FOLDER,
     logs::setup_logger,
     resources::{ResourceManager, get_root},
-    routing::{Bulldozer, MethodRouter, get, post},
+    routing::{Bulldozer, MethodRouter, delete, get, patch, post},
     vfs::{PageLayout, VfsPath, init_vfs},
     watcher::init_watcher,
 };
@@ -71,6 +73,7 @@ async fn main() {
     let auth_context = Arc::new(resources.read().await.load_auth().await);
 
     let mut router = MethodRouter::default();
+    
     router
         .add(post("/admin/login"), ResourceRefType::Api(Box::new(login)))
         .expect("failed to register /login route");
@@ -80,11 +83,24 @@ async fn main() {
     router
         .add(get("/health"), ResourceRefType::Content(Bytes::from("ok")))
         .expect("failed to register /health route");
+    router
+        .add(post("/api/posts"), ResourceRefType::Api(Box::new(create_post)))
+        .expect("failed to register post /api/posts route");
+    router
+        .add(delete("/api/posts"), ResourceRefType::Api(Box::new(delete_post)))
+        .expect("failed to register delete /api/posts route");
+    router
+        .add(get("/api/posts"), ResourceRefType::Api(Box::new(get_posts)))
+        .expect("failed to register get /api/posts router");
+    router
+        .add(patch("/api/posts"), ResourceRefType::Api(Box::new(update_post)))
+        .expect("failed to register patch /api/posts router");
+    
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;
 
     let router = Arc::new(RwLock::new(router));
-    let bulldozer = Arc::new(Bulldozer::new(Arc::clone(&router), auth_context, vfs));
+    let bulldozer = Arc::new(Bulldozer::new(Arc::clone(&router), auth_context, vfs, Arc::clone(&resources)));
 
     init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources));
 

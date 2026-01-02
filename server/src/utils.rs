@@ -22,6 +22,14 @@ pub fn make_bad_request() -> Response {
     make_response(StatusCode::BAD_REQUEST, "bad request")
 }
 
+pub fn make_unauthorized() -> Response {
+    make_response(StatusCode::UNAUTHORIZED, "unauthorized")
+}
+
+pub fn make_no_content() -> Response {
+    make_empty_response(StatusCode::NO_CONTENT)
+}
+
 pub fn make_internal_error() -> Response {
     make_response(StatusCode::INTERNAL_SERVER_ERROR, "internal error")
 }
@@ -29,6 +37,12 @@ pub fn make_internal_error() -> Response {
 pub fn make_empty_response(status: StatusCode) -> Response {
     let mut res = Response::new(StreamBody::new(Box::pin(stream::empty())));
     *res.status_mut() = status;
+    res
+}
+
+pub fn make_json_response(content: &str) -> Response {
+    let mut res = make_response(StatusCode::OK, content);
+    res.headers_mut().insert("Content-Type", "application/json".parse().unwrap());
     res
 }
 

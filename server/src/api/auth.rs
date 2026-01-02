@@ -82,7 +82,7 @@ pub fn login(mut ctx: ApiContext) -> BoxFuture<'static, Response> {
             let jwt = jsonwebtoken::encode(&Header::default(), &payload, &encode_key).expect("failed to encode jwt");
 
             let cookie = Cookie::build((AUTH_COOKIE_NAME, jwt))
-                .path("/admin")
+                .path("/")
                 .http_only(true)
                 .max_age(Duration::seconds(exp as i64))
                 .build();
