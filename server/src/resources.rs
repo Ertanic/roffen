@@ -95,6 +95,7 @@ impl ResourceManager {
         }
 
         while let Some(mut child) = children.pop() {
+            child.inherited_layouts.extend(page.inherited_layouts.iter().cloned());
             child.inherited_layouts.extend(layouts.iter().cloned());
             pages.push(child);
         }
