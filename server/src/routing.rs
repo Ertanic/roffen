@@ -3,6 +3,7 @@ use crate::{
     api::{ApiContext, auth::JwtPayload},
     consts::AUTH_COOKIE_NAME,
     resources::ResourceManager,
+    templates::functions::register_functions,
     utils::{make_internal_error, make_not_found, make_see_other},
     vfs::VirtualFS,
 };
@@ -28,7 +29,6 @@ use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
 use vfs::async_vfs::AsyncFileSystem;
-use crate::templates::functions::register_functions;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -156,7 +156,7 @@ impl Service<Request<Incoming>> for Bulldozer {
             let auth_ctx = Arc::clone(&auth_context);
             let cookies = Arc::new(LazyLock::new(|| parse_cookies(headers)));
             let cookies_jwt = Arc::clone(&cookies);
-            let auth = LazyLock::new(move || decode_jwt_from_cookies(&cookies_jwt, &auth_ctx));
+            let auth = Arc::new(LazyLock::new(move || decode_jwt_from_cookies(&cookies_jwt, &auth_ctx)));
 
             match result {
                 Ok(result) => match result.value {
@@ -199,7 +199,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                     ResourceRefType::Page { index, layouts } => {
                         trace!("found page resource ref: {index:?}");
 
-                        match (method, path.as_str(), &*auth) {
+                        match (method, path.as_str(), &**auth) {
                             (Method::GET, "/admin", None) => {
                                 trace!("found system path, redirecting to login page");
                                 return Ok(make_see_other("/admin/login?next=/admin"));
@@ -239,9 +239,11 @@ impl Service<Request<Incoming>> for Bulldozer {
                             }
                         }
 
-                        let has_auth = auth.is_some();
-                        engine.add_function("auth", move || has_auth);
-                        
+                        engine.add_function("auth", {
+                            let auth = Arc::clone(&auth);
+                            move || (**auth).as_ref().map(|auth| upon::to_value(auth).unwrap())
+                        });
+
                         register_functions(&mut engine, resources);
 
                         let mut content = String::new();
@@ -265,7 +267,15 @@ impl Service<Request<Incoming>> for Bulldozer {
                             }
                         };
 
-                        let rendered = match template.render(&engine, upon::value! {}).to_string() {
+                        let rendered = match template
+                            .render(
+                                &engine,
+                                upon::value! {
+                                    query: query,
+                                },
+                            )
+                            .to_string()
+                        {
                             Ok(r) => r,
                             Err(err) => {
                                 error!("failed to render {index:?} because {err:#}");
@@ -280,7 +290,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                     }
                     ResourceRefType::Api(callback) => {
                         let cookies = (**cookies).clone();
-                        let jwt = auth.clone();
+                        let jwt = (**auth).clone();
                         let ctx = ApiContext {
                             request: req,
                             query,

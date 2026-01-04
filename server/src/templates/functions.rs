@@ -33,6 +33,15 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
             })
         }
     });
+
+    engine.add_function("len", |list: &[Value]| list.len() as i64);
+
+    engine.add_function("date", |timestamp: i64, format: &str| {
+        let timestamp = jiff::Timestamp::from_second(timestamp).ok()?;
+        Some(timestamp.strftime(format).to_string())
+    });
+
+    engine.add_function("eq", |first: &Value, second: &Value| *first == *second);
 }
 
 fn posts_to_upon_values(runtime: Handle, stream_result: VfsResult<impl Stream<Item = Post>>) -> Option<Vec<Value>> {

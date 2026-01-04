@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+    {% include "head" %}
+    {% include "styles" %}
+</head>
+<body>
+{% if auth() %}
+{% with all_posts() as posts %}
+{% include "navbar" %}
+<main class="content-center full">
+    <div class="page-header">
+        <div>
+            <h2 style="margin:0">Posts</h2>
+            <p class="muted" style="margin:0.25rem 0 0 0">List of all blog articles — drafts, published.</p>
+        </div>
+
+        <div class="toolbar">
+            <select class="select" name="status" onchange="filterPosts(this.value)">
+                <option value="" {%- if not query?.draft %} selected {% endif -%}>all</option>
+                <option value="false" {%- if query?.draft | eq: "false" %} selected {% endif -%}>public</option>
+                <option value="true" {%- if query?.draft | eq: "true" %} selected {% endif -%}>draft</option>
+            </select>
+
+            <a class="button" href="/admin/posts/new">new post</a>
+        </div>
+    </div>
+
+    <table class="posts-table">
+        <thead>
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Data</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% if len(posts) %}
+            {% for post in posts %}
+                {% if query?.draft | eq: "true" %}
+                    {% if post.draft %}
+                        {% include "post-item" %}
+                    {% endif %}
+                {% else if query?.draft | eq: "false" %}
+                    {% if not post.draft %}
+                        {% include "post-item" %}
+                    {% endif %}
+                {% else %}
+                    {% include "post-item" %}
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="6" class="muted" style="padding:2rem; text-align:center">No posts, create one.</td>
+            </tr>
+        {% endif %}
+        </tbody>
+    </table>
+</main>
+
+<script>
+    function filterPosts(filter) {
+        if (filter) {
+            window.location.assign(window.location.pathname + "?draft=" + filter)
+        } else {
+            window.location.assign(window.location.pathname)
+        }
+    }
+
+    function deletePost(id) {
+        const conf = confirm(`delete post with id ${id}?`);
+        if (conf) {
+            fetch(`/api/posts?id=${id}`, {method: 'DELETE'}).then(() => {
+                document.getElementById(id).remove();
+                console.log(`post ${id} has been deleted`);
+            }, (err) => {
+                console.error(err);
+            });
+        }
+    }
+
+    function getBadge(id) {
+        const tr = document.getElementById(id);
+        return tr.children[3].children[0];
+    }
+
+    function togglePostStatus(id) {
+        const badge = getBadge(id);
+
+        const req = {
+            post_id: id,
+        };
+
+        if (badge.classList.contains('draft')) {
+            req.new_status = 'public';
+        } else {
+            req.new_status = 'draft';
+        }
+
+        const body = JSON.stringify(req);
+        fetch(`/api/posts?id=${id}`, {
+            method: 'PATCH',
+            body
+        }).then(() => {
+            console.log(`post ${id} status has been changed`);
+            window.location.reload();
+        }, err => console.error(err))
+    }
+</script>
+{% endwith %}
+{% else %}
+<p>you are not authorized</p>
+{% endif %}
+</body>
+</html>

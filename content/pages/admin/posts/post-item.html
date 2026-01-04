@@ -1,0 +1,31 @@
+<tr id="{{ post.id }}">
+    <td>
+        <div class="post-title">
+            <p class="text-truncate">{{ post.title }}</p>
+        </div>
+    </td>
+    <td>
+        <div>{{ post.author }}</div>
+    </td>
+    <td class="muted">{{ post.created_at | date: "%d.%m.%Y" }}</td>
+    <td>
+        {% if post.draft %}
+        <span class="badge draft">draft</span>
+        {% else %}
+        <span class="badge published">public</span>
+        {% endif %}
+    </td>
+    <td style="text-align:right">
+        <div class="actions">
+            <a class="btn" href="/admin/posts/{{ post.id }}/edit">edit</a>
+
+            {% if post.draft %}
+            <button class="btn outline" onclick="togglePostStatus('{{ post.id }}')">public</button>
+            {% else %}
+            <button class="btn outline" onclick="togglePostStatus('{{ post.id }}')">hide</button>
+            {% endif %}
+
+            <button class="btn danger" onclick="deletePost('{{ post.id }}')">delete</button>
+        </div>
+    </td>
+</tr>
