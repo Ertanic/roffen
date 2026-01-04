@@ -3,14 +3,14 @@ use crate::{
     resources::{GetPostsRequest, ResourceManager},
 };
 use futures_util::{Stream, StreamExt};
-use log::{debug, error};
+use log::{error, trace};
 use std::sync::Arc;
 use tokio::{runtime::Handle, sync::RwLock};
 use upon::{Engine, Value};
 use vfs::VfsResult;
 
 pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceManager>>) {
-    debug!("registering templates functions...");
+    trace!("registering templates functions...");
 
     engine.add_function("all_posts", {
         let resources = Arc::clone(&resources);
@@ -30,6 +30,23 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
                 let runtime = Handle::current();
                 let result = runtime.block_on(async { resources.read().await.get_posts(GetPostsRequest::Chunk { count, offset }).await });
                 posts_to_upon_values(runtime, result)
+            })
+        }
+    });
+
+    engine.add_function("get_post_by_id", {
+        let resources = Arc::clone(&resources);
+        move |id: &str| {
+            tokio::task::block_in_place(|| {
+                let runtime = Handle::current();
+                let result = match runtime.block_on(async { resources.read().await.get_post(id).await }) {
+                    Ok(post) => post,
+                    Err(err) => {
+                        error!("unable to get post {id} because {err}");
+                        return None;
+                    }
+                };
+                upon::to_value(result).ok()
             })
         }
     });

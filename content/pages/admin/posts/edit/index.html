@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+    {% include "head" %}
+    {% include "styles" %}
+    <style>
+        /* ===== Base ===== */
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+            background: #f7f8fb;
+        }
+
+        /* ===== Page Layout ===== */
+
+        main.editor-layout {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-rows: auto 1fr;
+            overflow: hidden;
+            padding: 1rem;
+            gap: 0.75rem;
+        }
+
+        .editor-header h2 {
+            margin: 0;
+        }
+
+        /* ===== Editor Columns ===== */
+
+        .editor {
+            display: grid;
+            grid-template-columns: 260px 1fr 320px;
+            gap: 1rem;
+            min-height: 0;
+        }
+
+        .editor-panel {
+            background: #fff;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-y: auto;
+            min-height: 0;
+            box-shadow: 0 6px 16px rgba(16, 24, 40, 0.04);
+        }
+
+        /* ===== Components Panel ===== */
+
+        .component {
+            padding: 0.5rem 0.75rem;
+            border: 1px dashed rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            background: #fafbfc;
+            cursor: grab;
+            user-select: none;
+            font-size: 0.9rem;
+        }
+
+        .component:active {
+            cursor: grabbing;
+        }
+
+        /* ===== Canvas ===== */
+
+        .editor-canvas {
+            background: #fff;
+            border-radius: 8px;
+            padding: 1rem;
+            overflow: auto;
+            min-height: 0;
+            box-shadow: 0 6px 16px rgba(16, 24, 40, 0.04);
+        }
+
+        .canvas-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            grid-auto-rows: 80px;
+            gap: 12px;
+            /* including the title size */
+            min-height: calc(100% - 2em - .6em * 4 - 1rem * 2);
+        }
+
+        /* Grid overlay (optional, for visual aid) */
+        .canvas-grid::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        /* ===== Grid Blocks ===== */
+
+        .grid-block {
+            background: #fafbfc;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            border-radius: 6px;
+            padding: 0.75rem;
+            position: relative;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .grid-block.selected {
+            outline: 2px solid #2563eb;
+        }
+
+        /* Resize handle (right) */
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            right: -6px;
+            width: 12px;
+            height: 100%;
+            cursor: col-resize;
+        }
+
+        /* ===== Properties ===== */
+
+        .property {
+            margin-bottom: 0.75rem;
+        }
+
+        .property label {
+            display: block;
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .muted {
+            color: rgba(0, 0, 0, 0.45);
+            font-size: 0.85rem;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+    </style>
+</head>
+<body>
+{% if auth() %}
+{% if not query?.id %}
+<p>Post not found</p>
+{% else %}
+{% with get_post_by_id(query.id) as post %}
+{% include "navbar" %}
+<main class="editor-layout">
+
+    <header class="editor-header">
+        <h2>Edit post</h2>
+    </header>
+
+    <section class="editor">
+        <aside class="editor-panel">
+            <h4>Components</h4>
+
+            <div class="component" draggable="true" data-type="title">Title</div>
+            <div class="component" draggable="true" data-type="text">Text</div>
+            <div class="component" draggable="true" data-type="image">Image</div>
+            <div class="component" draggable="true" data-type="quote">Quote</div>
+        </aside>
+
+        <section class="editor-canvas">
+            <h1>{{ post.title }}</h1>
+            <div class="canvas-grid" id="canvas"></div>
+        </section>
+
+        <aside class="editor-panel" id="properties">
+            <h4>Properties</h4>
+            <p class="muted">Select a block</p>
+        </aside>
+
+    </section>
+</main>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const properties = document.getElementById('properties');
+    const COLS = 12;
+    let selectedBlock = null;
+
+    /* ===== Drag from components ===== */
+
+    document.querySelectorAll('.component').forEach(c => {
+        c.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('type', c.dataset.type);
+        });
+    });
+
+    canvas.addEventListener('dragover', e => e.preventDefault());
+
+    canvas.addEventListener('drop', e => {
+        e.preventDefault();
+        const type = e.dataTransfer.getData('type');
+        addBlock(type);
+    });
+
+    function addBlock(type) {
+        const block = document.createElement('div');
+        block.className = 'grid-block';
+        block.dataset.type = type;
+
+        block.style.gridColumn = 'span 12';
+        block.style.gridRow = 'span 1';
+
+        block.textContent = defaultText(type);
+
+        addResizeHandle(block);
+        block.onclick = () => selectBlock(block);
+
+        canvas.appendChild(block);
+    }
+
+    function defaultText(type) {
+        switch (type) {
+            case 'title':
+                return 'Post title';
+            case 'text':
+                return 'Text content...';
+            case 'quote':
+                return 'Quote...';
+            case 'image':
+                return 'Image URL';
+            default:
+                return '';
+        }
+    }
+
+    /* ===== Selection ===== */
+
+    function selectBlock(block) {
+        document.querySelectorAll('.grid-block').forEach(b => b.classList.remove('selected'));
+        block.classList.add('selected');
+        selectedBlock = block;
+        renderProperties(block);
+    }
+
+    /* ===== Resize logic (grid-based) ===== */
+
+    function addResizeHandle(block) {
+        const handle = document.createElement('div');
+        handle.className = 'resize-handle';
+        block.appendChild(handle);
+
+        let startX, startSpan;
+
+        handle.addEventListener('mousedown', e => {
+            e.stopPropagation();
+            startX = e.clientX;
+            startSpan = getSpan(block);
+
+            document.onmousemove = ev => resizeBlock(ev, block, startX, startSpan);
+            document.onmouseup = stopResize;
+        });
+    }
+
+    function getSpan(block) {
+        return Number(block.style.gridColumn.replace('span ', '')) || 1;
+    }
+
+    function resizeBlock(e, block, startX, startSpan) {
+        const delta = e.clientX - startX;
+        const colWidth = canvas.clientWidth / COLS;
+        const newSpan = Math.max(1, Math.min(COLS, startSpan + Math.round(delta / colWidth)));
+        block.style.gridColumn = `span ${newSpan}`;
+    }
+
+    function stopResize() {
+        document.onmousemove = null;
+        document.onmouseup = null;
+    }
+
+    /* ===== Properties panel ===== */
+
+    function renderProperties(block) {
+        const type = block.dataset.type;
+        properties.innerHTML = `<h4>Properties</h4>`;
+
+        properties.innerHTML += `
+            <div class="property">
+                <label>Grid span</label>
+                <input class="input" type="number" min="1" max="${COLS}"
+                    value="${getSpan(block)}">
+            </div>
+        `;
+
+        properties.querySelector('input').oninput = e => {
+            block.style.gridColumn = `span ${e.target.value}`;
+        };
+
+        if (type !== 'image') {
+            properties.innerHTML += `
+                <div class="property">
+                    <label>Content</label>
+                    <textarea class="input" rows="4">${block.textContent}</textarea>
+                </div>
+            `;
+            properties.querySelector('textarea').oninput = e => {
+                block.textContent = e.target.value;
+            };
+        }
+    }
+</script>
+{% endwith %}
+{% endif %}
+{% else %}
+<p>you are not authorized</p>
+{% endif %}
+</body>
+</html>
