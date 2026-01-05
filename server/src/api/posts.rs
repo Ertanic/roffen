@@ -26,9 +26,6 @@ struct PostComponent {
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     #[serde(default)]
     data: HashMap<String, String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    #[serde(default)]
-    children: Vec<PostComponent>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
