@@ -1,126 +1,71 @@
-const canvas = document.getElementById('canvas');
-const properties = document.getElementById('properties');
-const COLS = 12;
-let selectedBlock = null;
+const canvas = document.getElementById("canvas");
 
-/* ===== Drag from components ===== */
+let dragged = null;
 
-document.querySelectorAll('.component').forEach(c => {
-    c.addEventListener('dragstart', e => {
-        e.dataTransfer.setData('type', c.dataset.type);
+function getDragAfterElement(container, y) {
+    const items = [...container.querySelectorAll(".grid-block:not(.dragging)")];
+
+    let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
+
+    for (const el of items) {
+        const box = el.getBoundingClientRect();
+        const offset = y - (box.top + box.height / 2);
+
+        if (offset < 0 && offset > closest.offset) {
+            closest = { offset, element: el };
+        }
+    }
+
+    return closest.element;
+}
+
+function initBlockDrag(block) {
+    block.draggable = true;
+
+    block.addEventListener("dragstart", () => {
+        dragged = block;
+        block.classList.add("dragging");
+    });
+
+    block.addEventListener("dragend", () => {
+        block.classList.remove("dragging");
+        dragged = null;
+    });
+}
+
+document.querySelectorAll(".component").forEach(c => {
+    c.addEventListener("dragstart", e => {
+        e.dataTransfer.setData("type", c.dataset.type);
     });
 });
 
-canvas.addEventListener('dragover', e => e.preventDefault());
-
-canvas.addEventListener('drop', e => {
+canvas.addEventListener("dragover", e => {
     e.preventDefault();
-    const type = e.dataTransfer.getData('type');
-    addBlock(type);
+
+    const after = getDragAfterElement(canvas, e.clientY);
+
+    if (!dragged) return;
+
+    if (after == null) {
+        canvas.appendChild(dragged);
+    } else {
+        canvas.insertBefore(dragged, after);
+    }
 });
 
-function addBlock(type) {
-    const block = document.createElement('div');
-    block.className = 'grid-block';
-    block.dataset.type = type;
+canvas.addEventListener("drop", e => {
+    e.preventDefault();
 
-    block.style.gridColumn = 'span 12';
-    block.style.gridRow = 'span 1';
+    const type = e.dataTransfer.getData("type");
 
-    block.textContent = defaultText(type);
-
-    addResizeHandle(block);
-    block.onclick = () => selectBlock(block);
-
-    canvas.appendChild(block);
-}
-
-function defaultText(type) {
-    switch (type) {
-        case 'title':
-            return 'Post title';
-        case 'text':
-            return 'Text content...';
-        case 'quote':
-            return 'Quote...';
-        case 'image':
-            return 'Image URL';
-        default:
-            return '';
+    if (type) {
+        const block = document.createElement("div");
+        block.className = "grid-block";
+        block.textContent = type;
+        block.style.gridColumn = "span 12";
+        initBlockDrag(block);
+        canvas.appendChild(block);
     }
-}
+});
 
-/* ===== Selection ===== */
-
-function selectBlock(block) {
-    document.querySelectorAll('.grid-block').forEach(b => b.classList.remove('selected'));
-    block.classList.add('selected');
-    selectedBlock = block;
-    renderProperties(block);
-}
-
-/* ===== Resize logic (grid-based) ===== */
-
-function addResizeHandle(block) {
-    const handle = document.createElement('div');
-    handle.className = 'resize-handle';
-    block.appendChild(handle);
-
-    let startX, startSpan;
-
-    handle.addEventListener('mousedown', e => {
-        e.stopPropagation();
-        startX = e.clientX;
-        startSpan = getSpan(block);
-
-        document.onmousemove = ev => resizeBlock(ev, block, startX, startSpan);
-        document.onmouseup = stopResize;
-    });
-}
-
-function getSpan(block) {
-    return Number(block.style.gridColumn.replace('span ', '')) || 1;
-}
-
-function resizeBlock(e, block, startX, startSpan) {
-    const delta = e.clientX - startX;
-    const colWidth = canvas.clientWidth / COLS;
-    const newSpan = Math.max(1, Math.min(COLS, startSpan + Math.round(delta / colWidth)));
-    block.style.gridColumn = `span ${newSpan}`;
-}
-
-function stopResize() {
-    document.onmousemove = null;
-    document.onmouseup = null;
-}
-
-/* ===== Properties panel ===== */
-
-function renderProperties(block) {
-    const type = block.dataset.type;
-    properties.innerHTML = `<h4>Properties</h4>`;
-
-    properties.innerHTML += `
-            <div class="property">
-                <label>Grid span</label>
-                <input class="input" type="number" min="1" max="${COLS}"
-                    value="${getSpan(block)}">
-            </div>
-        `;
-
-    properties.querySelector('input').oninput = e => {
-        block.style.gridColumn = `span ${e.target.value}`;
-    };
-
-    if (type !== 'image') {
-        properties.innerHTML += `
-                <div class="property">
-                    <label>Content</label>
-                    <textarea class="input" rows="4">${block.textContent}</textarea>
-                </div>
-            `;
-        properties.querySelector('textarea').oninput = e => {
-            block.textContent = e.target.value;
-        };
-    }
-}
+document.querySelectorAll(".grid-block").forEach(initBlockDrag);

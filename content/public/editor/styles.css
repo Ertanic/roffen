@@ -101,12 +101,28 @@ main.editor-layout {
     border-radius: 6px;
     padding: 0.75rem;
     position: relative;
-    cursor: pointer;
+    cursor: grab;
     overflow: hidden;
 }
 
 .grid-block.selected {
     outline: 2px solid #2563eb;
+}
+
+.grid-block:active {
+    cursor: grabbing;
+}
+
+.grid-block.dragging {
+    opacity: 0.4;
+}
+
+
+.placeholder {
+    background: linear-gradient(90deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));
+    border: 2px dashed rgba(37,99,235,0.18);
+    border-radius: 6px;
+    min-height: 40px;
 }
 
 /* Resize handle (right) */
