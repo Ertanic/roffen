@@ -102,7 +102,14 @@ main.editor-layout {
     padding: 0.75rem;
     position: relative;
     cursor: grab;
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+.grid-block *:not(blockquote) {
+    height: fit-content;
+    padding: 0;
+    margin: 0;
 }
 
 .grid-block.selected {
@@ -117,22 +124,15 @@ main.editor-layout {
     opacity: 0.4;
 }
 
-
-.placeholder {
-    background: linear-gradient(90deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));
-    border: 2px dashed rgba(37,99,235,0.18);
-    border-radius: 6px;
-    min-height: 40px;
+.grid-block.component-image {
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-/* Resize handle (right) */
-.resize-handle {
-    position: absolute;
-    top: 0;
-    right: -6px;
-    width: 12px;
-    height: 100%;
-    cursor: col-resize;
+.grid-block.component-image img {
+    max-width: 100%;
+    max-height: 100%;
 }
 
 /* ===== Properties ===== */
@@ -156,6 +156,8 @@ main.editor-layout {
 textarea {
     resize: vertical;
 }
+
+/* ===== Remove Component Button ===== */
 
 #component-remove {
     position: absolute;
