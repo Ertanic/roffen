@@ -29,7 +29,10 @@
         </aside>
 
         <section class="editor-canvas">
-            <h1>{{ post.title }}</h1>
+            <div class="article-title">
+                <h1 id="article-title-text">{{ post.title }}</h1>
+                <button id="title-edit-btn" title="Edit title">✎</button>
+            </div>
             <div class="canvas-grid" id="canvas">
                 <button id="component-remove">
                     <svg viewBox="0 0 24 24">
@@ -52,6 +55,36 @@
 <script src="/editor/js/drag-n-drop.js"></script>
 <script src="/editor/js/properties.js"></script>
 <script src="/editor/js/delete-btn.js"></script>
+<script>
+    const titleText = document.getElementById("article-title-text");
+    const editBtn = document.getElementById("title-edit-btn");
+
+    editBtn.addEventListener("click", () => {
+        const current = titleText.innerText;
+
+        const next = prompt("Edit article title", current);
+
+        if (next === null) return;
+
+        const normalized = next.trim();
+        if (!normalized) return;
+
+        titleText.innerText = normalized;
+
+        const body = {
+            post_id: '{{ post.id }}',
+            new_title: normalized,
+        };
+
+        fetch('/api/posts', {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+        }).then(
+            () => console.log('new title saved'),
+            err => console.error(err)
+        );
+    });
+</script>
 {% endwith %}
 {% endif %}
 {% else %}
