@@ -54,6 +54,16 @@ canvas.addEventListener("dragover", e => {
     }
 });
 
+function keepBlockInView(block, fn) {
+    const canvas = document.querySelector(".editor-canvas");
+    const before = block.getBoundingClientRect().top;
+
+    fn();
+
+    const after = block.getBoundingClientRect().top;
+    canvas.scrollTop += (after - before);
+}
+
 function initProperties(block) {
     block.addEventListener("click", () => {
         document.querySelectorAll(".grid-block.selected")
@@ -62,11 +72,21 @@ function initProperties(block) {
         block.classList.add("selected");
         propertiesBody.innerHTML = "";
 
+        let raf;
+
         /* CONTENT */
         const contentProp = createTextarea(
             "Content",
             block.dataset.content ?? block.innerText,
-            value => block.children[0].innerText = value,
+            value => {
+                cancelAnimationFrame(raf);
+                raf = requestAnimationFrame(() => {
+                    keepBlockInView(block, () => {
+                        block.children[0].innerText = value;
+                        autoResizeRows(block);
+                    });
+                });
+            },
         );
 
         propertiesBody.appendChild(contentProp);
@@ -88,11 +108,9 @@ function initProperties(block) {
         const rowProp = createNumber(
             "Height (rows)",
             block.dataset.row ?? 1,
-            1, 10,
-            value => {
-                block.dataset.row = value;
-                block.style.gridRow = `span ${value}`;
-            }
+            1, "",
+            value => applyRows(block, value),
+            "height-prop"
         );
 
         propertiesBody.appendChild(rowProp);
@@ -154,7 +172,7 @@ function createTextarea(label, value, onChange) {
     return wrap;
 }
 
-function createNumber(label, value, min, max, onChange) {
+function createNumber(label, value, min, max, onChange, id = null) {
     const wrap = document.createElement("div");
     wrap.className = "property";
 
@@ -166,6 +184,10 @@ function createNumber(label, value, min, max, onChange) {
     input.min = min;
     input.max = max;
     input.value = value;
+
+    if (id) {
+        input.id = id;
+    }
 
     input.addEventListener("input", e => onChange(+e.target.value));
 
@@ -227,6 +249,34 @@ canvas.addEventListener("drop", e => {
         canvas.appendChild(block);
     }
 });
+
+function autoResizeRows(block) {
+    const rowHeight = 80;
+    block.style.gridRow = "span 1";
+
+    const contentHeight = block.children[0].scrollHeight;
+    const rows = Math.max(1, Math.ceil(contentHeight / rowHeight));
+
+    applyRows(block, rows);
+}
+
+function applyRows(block, rows) {
+    const value = Math.max(1, rows);
+
+    block.dataset.row = String(value);
+    block.style.gridRow = `span ${value}`;
+
+    syncProperties(block);
+}
+
+function syncProperties(block) {
+    if (!block.classList.contains("selected")) return;
+
+    const rowInput = propertiesBody.querySelector('#height-prop');
+    if (rowInput) {
+        rowInput.value = Number(block.dataset.row);
+    }
+}
 
 document.querySelectorAll(".grid-block").forEach(comp => {
     initBlockDrag(comp);

@@ -104,6 +104,9 @@ main.editor-layout {
     cursor: grab;
     display: flex;
     align-items: center;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow: auto;
 }
 
 .grid-block *:not(blockquote) {
