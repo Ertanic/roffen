@@ -51,6 +51,39 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
         }
     });
 
+    engine.add_function("get_components", {
+        let resources = Arc::clone(&resources);
+        move || {
+            tokio::task::block_in_place(|| {
+                let runtime = Handle::current();
+                let result = match runtime.block_on(async { resources.read().await.load_components().await }) {
+                    Ok(comps) => runtime.block_on(async { comps.collect::<Vec<_>>().await }),
+                    Err(err) => {
+                        error!("unable to load components because {err}");
+                        return None;
+                    }
+                };
+                upon::to_value(result).ok()
+            })
+        }
+    });
+
+    engine.add_function("is_map", |val: &Value| matches!(val, Value::Map(_)));
+
+    engine.add_function("flat_input", |val: &Value| {
+        if let Value::Map(map) = val {
+            if let Some((_, map)) = map.first_key_value() {
+                Some(map.clone())
+            }
+            else {
+                None
+            }
+        }
+        else {
+            None
+        }
+    });
+
     engine.add_function("len", |list: &[Value]| list.len() as i64);
 
     engine.add_function("date", |timestamp: i64, format: &str| {

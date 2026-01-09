@@ -2,13 +2,17 @@ use crate::{
     PageLayout, ResourceRefType,
     api::{
         auth::AuthContext,
+        components::{Component, ComponentMeta},
         posts::{Post, PostBody},
     },
-    consts::{AUTH_FILENAME, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER},
+    consts::{AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER},
     routing::{MethodRouter, get},
     vfs::{PageDir, VfsPath, VirtualFS},
 };
-use futures_util::{AsyncReadExt, AsyncWriteExt, StreamExt, stream, stream::BoxStream};
+use futures_util::{
+    AsyncReadExt, AsyncWriteExt, stream,
+    stream::{BoxStream, StreamExt},
+};
 use log::{debug, error, warn};
 use ron::ser::PrettyConfig;
 use std::{env, path::PathBuf, sync::Arc};
@@ -83,11 +87,13 @@ impl ResourceManager {
 
             if filetype.file_type == VfsFileType::Directory {
                 children.push(PageDir::new(entry));
-            } else {
+            }
+            else {
                 let filename = entry.split('/').next_back().unwrap().to_owned();
                 if filename == INDEX_FILENAME {
                     index_file = Some(entry);
-                } else {
+                }
+                else {
                     let layout = PageLayout::new(entry);
                     layouts.push(layout);
                 }
@@ -132,7 +138,8 @@ impl ResourceManager {
                 self._load_page(router, &mut pages, page.clone()).await;
                 debug!("page {page:?} has been registered");
             }
-        } else {
+        }
+        else {
             warn!("unable to load page {path}");
         }
     }
@@ -162,7 +169,8 @@ impl ResourceManager {
 
                 if filetype.file_type == VfsFileType::Directory {
                     dirs.push(entry);
-                } else {
+                }
+                else {
                     let normalized = normalize_route(&entry.strip_prefix(VfsPath::new(PUBLIC_FOLDER)).unwrap());
 
                     match router.add(get(&normalized), ResourceRefType::File(VfsPath::new(entry))) {
@@ -201,7 +209,9 @@ impl ResourceManager {
         let content = ron::ser::to_string_pretty(&post.content, PrettyConfig::new().struct_names(true)).unwrap();
 
         // it is only possible to add to the contents of the file, but not to overwrite it
-        if let Ok(exists) = self.vfs.exists(&path).await && exists {
+        if let Ok(exists) = self.vfs.exists(&path).await
+            && exists
+        {
             debug!("post file already exists, removing...");
             self.vfs.remove_file(&path).await?;
         }
@@ -263,6 +273,92 @@ impl ResourceManager {
 
         read_post(self.vfs.clone(), &filepath).await
     }
+
+    async fn ensure_components_folder(&self) -> VfsResult<VfsPath> {
+        let folder = VfsPath::new(COMPS_FOLDER);
+
+        if let Ok(exists) = self.vfs.exists(&folder).await
+            && !exists
+        {
+            self.vfs.create_dir(COMPS_FOLDER).await?;
+        }
+
+        Ok(folder)
+    }
+
+    pub async fn load_components(&self) -> VfsResult<BoxStream<'static, Component>> {
+        let comps_folder = self.ensure_components_folder().await?;
+        let exists_vfs = Arc::clone(&self.vfs);
+        let read_vfs = Arc::clone(&self.vfs);
+
+        let components = self
+            .vfs
+            .read_dir(&comps_folder)
+            .await?
+            .map(move |f| comps_folder.join(f))
+            .filter_map(move |f| {
+                let vfs = Arc::clone(&exists_vfs);
+                async move {
+                    let meta_file = f.join(COMPS_META_FILE);
+                    let js_file = f.join(COMPS_JS_FILE);
+
+                    if let Ok(meta_exists) = vfs.exists(&meta_file).await
+                        && meta_exists
+                    {
+                        if let Ok(js_exists) = vfs.exists(&meta_file).await
+                            && js_exists
+                        {
+                            Some((meta_file, js_file))
+                        }
+                        else {
+                            warn!("no {COMPS_JS_FILE} in component folder {f}");
+                            None
+                        }
+                    }
+                    else {
+                        warn!("no meta in component folder {f}");
+                        None
+                    }
+                }
+            })
+            .filter_map(move |(meta_path, js_path)| {
+                let vfs = Arc::clone(&read_vfs);
+                async move {
+                    match read_component_meta(vfs, &meta_path).await {
+                        Ok(meta) => Some(Component { js: js_path, meta }),
+                        Err(err) => {
+                            warn!("unable to read component metadata because {err}");
+                            None
+                        }
+                    }
+                }
+            });
+
+        Ok(Box::pin(components))
+    }
+
+    pub async fn load_component_js(&self, component: &Component) -> VfsResult<String> {
+        let mut buf = String::new();
+        let mut file = self.vfs.open_file(&component.js).await?;
+
+        file.read_to_string(&mut buf).await?;
+
+        Ok(buf)
+    }
+}
+
+async fn read_component_meta(vfs: VirtualFS, meta: &str) -> VfsResult<ComponentMeta> {
+    let mut buf = String::new();
+    let mut file = vfs.open_file(meta).await?;
+
+    file.read_to_string(&mut buf).await?;
+
+    let meta = match ron::from_str(&buf) {
+        Ok(meta) => meta,
+        Err(err) => return Err(VfsErrorKind::Other(format!("{err}")).into()),
+    };
+
+    Ok(meta)
 }
 
 async fn read_post(vfs: VirtualFS, filename: &str) -> VfsResult<Post> {
@@ -289,7 +385,8 @@ fn get_post_filename(id: &str) -> String {
 fn normalize_route(route: &str) -> String {
     if route.starts_with("/") {
         route.to_string()
-    } else {
+    }
+    else {
         "/".to_owned() + route
     }
 }

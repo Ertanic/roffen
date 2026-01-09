@@ -40,6 +40,12 @@ pub fn make_empty_response(status: StatusCode) -> Response {
     res
 }
 
+pub fn make_js_response(content: &str) -> Response {
+    let mut res = make_response(StatusCode::OK, content);
+    res.headers_mut().insert("Content-Type", "application/javascript".parse().unwrap());
+    res
+}
+
 pub fn make_json_response(content: &str) -> Response {
     let mut res = make_response(StatusCode::OK, content);
     res.headers_mut().insert("Content-Type", "application/json".parse().unwrap());

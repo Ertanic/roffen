@@ -5,6 +5,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
+use serde::Serialize;
 use vfs::async_vfs::{AsyncOverlayFS, AsyncPhysicalFS, AsyncVfsPath};
 #[cfg(not(debug_assertions))]
 use {
@@ -84,7 +85,7 @@ impl PageDir {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct VfsPath(String);
 
 impl VfsPath {

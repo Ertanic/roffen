@@ -60,37 +60,24 @@ canvas.addEventListener("drop", e => {
     const type = e.dataTransfer.getData("type");
 
     if (type) {
-        let previewElement = null;
-        switch (type) {
-            case "title":
-                previewElement = document.createElement("h1");
-                previewElement.textContent = "Title";
-                break;
-            case "text":
-                previewElement = document.createElement("p");
-                previewElement.textContent = "Text";
-                break;
-            case "image":
-                previewElement = document.createElement("img");
-                previewElement.src = "/editor/img/image-placeholder.png";
-                break;
-            case "quote":
-                previewElement = document.createElement("blockquote");
-                previewElement.textContent = "Quote";
-                break;
+        const block = document.createElement("div");
+        block.classList.add("grid-block");
+        block.dataset.type = type;
+
+        const comp = componentsRegistry.get(type);
+        const ctx = new ComponentMountContext(block, comp.html, comp.data, comp.title);
+
+        if (comp.hooks.mount) {
+            comp.hooks.mount(ctx);
+        } else {
+            const previewEl = document.createElement(comp.html);
+            previewEl.innerText = comp.data.content ?? comp.title;
+            block.appendChild(previewEl);
         }
 
-        const block = document.createElement("div");
-
-        block.classList.add("grid-block");
-
-        if (type === "image") {
-            block.classList.add("component-image");
-            block.style.gridRow = "span 4";
-            block.style.gridColumn = "span 6";
-
-            block.dataset.col = "6";
-            block.dataset.row = "4";
+        if (comp.hooks.setSize) {
+            const ctx = new ComponentSetSizeContext(block, comp.data);
+            comp.hooks.setSize(ctx);
         } else {
             block.style.gridColumn = "span 12";
 
@@ -98,12 +85,9 @@ canvas.addEventListener("drop", e => {
             block.dataset.row = "1";
         }
 
-        block.dataset.type = type;
-
         initBlockDrag(block);
-        initProperties(block);
+        initProperties(block, comp);
 
-        block.appendChild(previewElement);
         canvas.appendChild(block);
     }
 });

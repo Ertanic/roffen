@@ -1,0 +1,8 @@
+ComponentMeta(
+    name: "title",
+    title: "Title",
+    html: "h1",
+    defaults: {
+        "level": "1",
+    }
+)

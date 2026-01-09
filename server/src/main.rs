@@ -3,10 +3,10 @@ mod consts;
 mod logs;
 mod resources;
 mod routing;
+mod templates;
 mod utils;
 mod vfs;
 mod watcher;
-mod templates;
 
 use crate::{
     api::{
@@ -32,6 +32,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{net::TcpListener, sync::RwLock};
+use crate::api::components::get_component_js;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -73,7 +74,7 @@ async fn main() {
     let auth_context = Arc::new(resources.read().await.load_auth().await);
 
     let mut router = MethodRouter::default();
-    
+
     router
         .add(post("/admin/login"), ResourceRefType::Api(Box::new(login)))
         .expect("failed to register /login route");
@@ -91,11 +92,14 @@ async fn main() {
         .expect("failed to register delete /api/posts route");
     router
         .add(get("/api/posts"), ResourceRefType::Api(Box::new(get_posts)))
-        .expect("failed to register get /api/posts router");
+        .expect("failed to register get /api/posts route");
     router
         .add(patch("/api/posts"), ResourceRefType::Api(Box::new(update_post)))
-        .expect("failed to register patch /api/posts router");
-    
+        .expect("failed to register patch /api/posts route");
+    router
+        .add(get("/components/js/{comp}"), ResourceRefType::Api(Box::new(get_component_js)))
+        .expect("failed to register get /api/components route");
+
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;
 

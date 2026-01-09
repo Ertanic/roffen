@@ -7,3 +7,6 @@ pub const AUTH_FILENAME: &str = "auth.toml";
 pub const AUTH_EXP: usize = 60 * 60 * 24; // day
 pub const AUTH_COOKIE_NAME: &str = "auth";
 pub const POSTS_FOLDER: &str = "posts";
+pub const COMPS_FOLDER: &str = "components";
+pub const COMPS_META_FILE: &str = "meta.ron";
+pub const COMPS_JS_FILE: &str = "index.js";

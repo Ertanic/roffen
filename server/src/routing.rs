@@ -291,7 +291,9 @@ impl Service<Request<Incoming>> for Bulldozer {
                     ResourceRefType::Api(callback) => {
                         let cookies = (**cookies).clone();
                         let jwt = (**auth).clone();
+                        let params = result.params;
                         let ctx = ApiContext {
+                            params,
                             request: req,
                             query,
                             cookies,
