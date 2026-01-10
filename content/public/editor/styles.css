@@ -201,6 +201,13 @@ textarea {
 
 /* ==== Title ==== */
 
+.article-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
 .article-title {
     display: flex;
     align-items: center;
@@ -231,4 +238,31 @@ textarea {
     font-weight: 600;
     width: 100%;
     padding: 0.25rem 0.5rem;
+}
+
+.save-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    padding: 6px 10px;
+    border-radius: 6px;
+
+    font-size: 12px;
+    font-weight: 500;
+
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.save-indicator.visible {
+    opacity: 1;
+    transform: translateY(0);
 }

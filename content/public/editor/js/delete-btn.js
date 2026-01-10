@@ -1,15 +1,11 @@
 const grid = document.querySelector('.canvas-grid');
 const deleteBtn = document.querySelector('#component-remove');
 
-console.log(deleteBtn)
-
 let activeItem = null;
 
 grid.addEventListener('mouseover', (e) => {
     const item = e.target.closest('.grid-block');
     if (!item) return;
-
-    console.log(item)
 
     const rect = item.getBoundingClientRect();
     const parentRect = grid.getBoundingClientRect();
@@ -31,4 +27,5 @@ deleteBtn.addEventListener('click', () => {
     if (!activeItem) return;
     activeItem.remove();
     deleteBtn.style.display = 'none';
+    markDirty();
 });

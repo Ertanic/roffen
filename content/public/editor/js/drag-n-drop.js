@@ -31,6 +31,7 @@ function initBlockDrag(block) {
     block.addEventListener("dragend", () => {
         block.classList.remove("dragging");
         dragged = null;
+        markDirty();
     });
 }
 
@@ -89,6 +90,8 @@ canvas.addEventListener("drop", e => {
         initProperties(block, comp);
 
         canvas.appendChild(block);
+
+        markDirty();
     }
 });
 

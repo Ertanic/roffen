@@ -22,5 +22,10 @@ const imageComponent = {
                     ctx.el.children[0].src = ctx.data.source;
                 }
             });
+    },
+    fetchData: ctx => {
+        return {
+            source: ctx.el.children[0].src,
+        }
     }
 }

@@ -29,28 +29,37 @@
         </aside>
 
         <section class="editor-canvas">
-            <div class="article-title">
-                <h1 id="article-title-text">{{ post.title }}</h1>
-                <button id="title-edit-btn" title="Edit title">✎</button>
+            <div class="article-header">
+                <div class="article-title">
+                    <h1 id="article-title-text">{{ post.title }}</h1>
+                    <button id="title-edit-btn" title="Edit title">✎</button>
+                </div>
+                <div id="save-indicator" class="save-indicator">
+                    ✓ Saved
+                </div>
             </div>
             <div class="canvas-grid" id="canvas">
                 {% for comp in post.content %}
-                <div class="grid-block" data-type="{{ comp.name }}" draggable="true"
-                {% for key, val in comp.data %}
-                     {% if not key | eq: "content" %}
-                        data-{{ key }}="{{ val }}"
-                     {% endif %}
-                {% endfor %}
-                {% if comp.data?.row | and: comp.data?.col %}
-                    style="grid-row: span {{ comp.data.row }}; grid-column: span {{ comp.data.col }}"
-                {% else %}
-                    style="grid-row: span 1; grid-column: span 12"
-                {% endif %} >
-                {%- if comp.data.content %}
-                    {% with get_component(comp.name, components) as component %}
-                        <{{ component.meta.html }}>{{ comp.data.content }}</{{ component.meta.html }}>
-                    {% endwith %}
-                {% endif -%}
+                <div class="grid-block component-{{ comp.name }}" data-type="{{ comp.name }}" draggable="true"
+                    {% for key, val in comp.data %}
+                         {% if not key | eq: "content" %}
+                            data-{{ key }}="{{ val }}"
+                         {% endif %}
+                    {% endfor %}
+                    {% if ?.comp.data?.row | and: ?.comp.data?.col %}
+                        style="grid-row: span {{ comp.data.row }}; grid-column: span {{ comp.data.col }}"
+                    {% else %}
+                        style="grid-row: span 1; grid-column: span 12"
+                    {% endif %}>
+                    {%- if ?.comp.data?.content %}
+                        {% with get_component(comp.name, components) as component %}
+                            <{{ component.meta.html }}>{{ comp.data.content }}</{{ component.meta.html }}>
+                        {% endwith %}
+                    {% else if ?.comp.data?.source %}
+                        {% with get_component(comp.name, components) as component %}
+                            <{{ component.meta.html }} src="{{ comp.data.source }}" />
+                        {% endwith %}
+                    {% endif -%}
                 </div>
                 {% endfor %}
 
@@ -73,34 +82,7 @@
 </main>
 
 <script>
-    const titleText = document.getElementById("article-title-text");
-    const editBtn = document.getElementById("title-edit-btn");
-
-    editBtn.addEventListener("click", () => {
-        const current = titleText.innerText;
-
-        const next = prompt("Edit article title", current);
-
-        if (next === null) return;
-
-        const normalized = next.trim();
-        if (!normalized) return;
-
-        titleText.innerText = normalized;
-
-        const body = {
-            post_id: '{{ post.id }}',
-            new_title: normalized,
-        };
-
-        fetch('/api/posts', {
-            method: 'PATCH',
-            body: JSON.stringify(body),
-        }).then(
-            () => console.log('new title saved'),
-            err => console.error(err)
-        );
-    });
+    const post_id = '{{ post.id }}';
 </script>
 
 {%- for name, component in components %}
@@ -202,6 +184,7 @@
             this.el.style.gridRow = `span ${value}`;
 
             this.syncProperties();
+            markDirty();
         }
 
         syncProperties() {
@@ -223,7 +206,10 @@
             const ta = document.createElement("textarea");
             ta.value = defaultVal;
 
-            ta.addEventListener("input", e => onChange(e.target.value));
+            ta.addEventListener("input", e => {
+                onChange(e.target.value);
+                markDirty();
+            });
 
             wrap.append(l, ta);
             this.panel.appendChild(wrap);
@@ -243,7 +229,10 @@
             input.max = max;
             input.value = defaultVal;
 
-            input.addEventListener("input", e => onChange(+e.target.value));
+            input.addEventListener("input", e => {
+                onChange(+e.target.value);
+                markDirty();
+            });
 
             wrap.append(l, input);
             this.panel.appendChild(wrap);
@@ -261,11 +250,21 @@
             input.type = "url";
             input.value = value;
 
-            input.addEventListener("input", e => onChange(e.target.value));
+            input.addEventListener("input", e => {
+                onChange(e.target.value);
+                markDirty();
+            });
 
             wrap.append(l, input);
             this.panel.appendChild(wrap);
             return wrap;
+        }
+    }
+
+    class ComponentFetchDataContext {
+        constructor(el, data) {
+            this.el = el;
+            this.data = data;
         }
     }
 </script>
@@ -273,6 +272,8 @@
 <script src="/editor/js/drag-n-drop.js"></script>
 <script src="/editor/js/properties.js"></script>
 <script src="/editor/js/delete-btn.js"></script>
+<script src="/editor/js/edit-title.js"></script>
+<script src="/editor/js/save-content.js"></script>
 
 {% endwith %}
 {% endwith %}

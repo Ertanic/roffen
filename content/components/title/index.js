@@ -21,5 +21,11 @@ const titleComponent = {
                 ctx.el.innerHTML = `<h${value}>${ctx.el.children[0].innerText}</h${value}>`;
                 ctx.el.dataset.level = value;
             });
+    },
+    fetchData: ctx => {
+        return {
+            content: ctx.el.children[0].innerText,
+            level: ctx.el.dataset.level,
+        }
     }
 }

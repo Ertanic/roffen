@@ -11,5 +11,10 @@ const quoteComponent = {
                     })
                 });
             });
+    },
+    fetchData: ctx => {
+        return {
+            content: ctx.el.children[0].innerText,
+        }
     }
 }
