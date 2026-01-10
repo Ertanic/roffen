@@ -6,6 +6,10 @@ function initProperties(block, comp) {
         block.classList.add("selected");
         propertiesBody.innerHTML = "";
 
+        if (!comp) {
+            comp = componentsRegistry.get(block.dataset.type);
+        }
+
         const ctx = new ComponentInitPropsContext(block, comp.data, comp.props, propertiesBody);
 
         if (comp.hooks.initProps) {

@@ -23,10 +23,8 @@
         <aside class="editor-panel">
             <h4>Components</h4>
 
-            {% for component in components %}
-
-            <div class="component" draggable="true" data-type="{{ component.meta.name }}">{{ component.meta.title }}</div>
-
+            {% for name, component in components %}
+            <div class="component" draggable="true" data-type="{{ name }}">{{ component.meta.title }}</div>
             {% endfor %}
         </aside>
 
@@ -36,6 +34,26 @@
                 <button id="title-edit-btn" title="Edit title">✎</button>
             </div>
             <div class="canvas-grid" id="canvas">
+                {% for comp in post.content %}
+                <div class="grid-block" data-type="{{ comp.name }}" draggable="true"
+                {% for key, val in comp.data %}
+                     {% if not key | eq: "content" %}
+                        data-{{ key }}="{{ val }}"
+                     {% endif %}
+                {% endfor %}
+                {% if comp.data?.row | and: comp.data?.col %}
+                    style="grid-row: span {{ comp.data.row }}; grid-column: span {{ comp.data.col }}"
+                {% else %}
+                    style="grid-row: span 1; grid-column: span 12"
+                {% endif %} >
+                {%- if comp.data.content %}
+                    {% with get_component(comp.name, components) as component %}
+                        <{{ component.meta.html }}>{{ comp.data.content }}</{{ component.meta.html }}>
+                    {% endwith %}
+                {% endif -%}
+                </div>
+                {% endfor %}
+
                 <button id="component-remove">
                     <svg viewBox="0 0 24 24">
                         <path d="M3 6h18M9 6v12m6-12v12M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14M10 6V4h4v2"/>
@@ -85,16 +103,16 @@
     });
 </script>
 
-{%- for component in components %}
-<script src="/components/js/{{ component.meta.name }}"></script>
+{%- for name, component in components %}
+<script src="/components/js/{{ name }}"></script>
 {%- endfor %}
 
 <script>
     const componentsRegistry = new Map();
 
-    {% for component in components -%}
-    componentsRegistry.set("{{ component.meta.name }}", {
-        hooks: {{ component.meta.name }}Component,
+    {% for name, component in components -%}
+    componentsRegistry.set("{{ name }}", {
+        hooks: {{ name }}Component,
         html: "{{ component.meta.html }}",
         title: "{{ component.meta.title }}",
         props: {

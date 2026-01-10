@@ -4,7 +4,7 @@ use crate::{
 };
 use futures_util::{Stream, StreamExt};
 use log::{error, trace};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{runtime::Handle, sync::RwLock};
 use upon::{Engine, Value};
 use vfs::VfsResult;
@@ -57,7 +57,7 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
             tokio::task::block_in_place(|| {
                 let runtime = Handle::current();
                 let result = match runtime.block_on(async { resources.read().await.load_components().await }) {
-                    Ok(comps) => runtime.block_on(async { comps.collect::<Vec<_>>().await }),
+                    Ok(comps) => runtime.block_on(async { comps.map(|comp| (comp.meta.name.clone(), comp)).collect::<HashMap<_, _>>().await }),
                     Err(err) => {
                         error!("unable to load components because {err}");
                         return None;
@@ -65,6 +65,15 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
                 };
                 upon::to_value(result).ok()
             })
+        }
+    });
+
+    engine.add_function("get_component", |name: &str, components: &Value| {
+        if let Value::Map(map) = components {
+            map.get(name).cloned()
+        }
+        else {
+            None
         }
     });
 
@@ -92,6 +101,15 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
     });
 
     engine.add_function("eq", |first: &Value, second: &Value| *first == *second);
+
+    engine.add_function("and", |first: &Value, second: &Value| {
+        if let (Value::Bool(first), Value::Bool(second)) = (first, second) {
+            *first && *second
+        }
+        else {
+            !matches!(first, Value::None) && !matches!(second, Value::None)
+        }
+    });
 }
 
 fn posts_to_upon_values(runtime: Handle, stream_result: VfsResult<impl Stream<Item = Post>>) -> Option<Vec<Value>> {
