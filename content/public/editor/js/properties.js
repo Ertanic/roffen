@@ -1,4 +1,4 @@
-function initProperties(block, comp) {
+function initProperties(block, comp = null) {
     block.addEventListener("click", () => {
         document.querySelectorAll(".grid-block.selected")
             .forEach(el => el.classList.remove("selected"));
@@ -37,4 +37,4 @@ function initProperties(block, comp) {
     });
 }
 
-document.querySelectorAll(".grid-block").forEach(initProperties);
+document.querySelectorAll(".grid-block").forEach(el => initProperties(el));
