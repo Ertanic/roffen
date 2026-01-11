@@ -143,3 +143,10 @@ class ComponentFetchDataContext {
         this.data = data;
     }
 }
+
+class ComponentNormalizeContext {
+    constructor(el, data) {
+        this.el = el;
+        this.data = data;
+    }
+}

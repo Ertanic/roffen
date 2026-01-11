@@ -36,5 +36,3 @@ function initProperties(block, comp = null) {
         );
     });
 }
-
-document.querySelectorAll(".grid-block").forEach(el => initProperties(el));

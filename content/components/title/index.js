@@ -14,7 +14,7 @@ const titleComponent = {
 
         ctx.createNumber(
             "Level",
-            ctx.data.level ?? 1,
+            ctx.el.dataset.level ?? ctx.data.level ?? 1,
             1,
             6,
             value => {
@@ -27,5 +27,9 @@ const titleComponent = {
             content: ctx.el.children[0].innerText,
             level: ctx.el.dataset.level,
         }
-    }
+    },
+    normalize: ctx => {
+        const level = ctx.el.dataset.level ?? ctx.data.level ?? 1;
+        ctx.el.innerHTML = `<h${level}>${ctx.el.children[0].innerText}</h${level}>`;
+    },
 }
