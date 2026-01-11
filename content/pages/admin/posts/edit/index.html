@@ -97,24 +97,6 @@
         hooks: {{ name }}Component,
         html: "{{ component.meta.html }}",
         title: "{{ component.meta.title }}",
-        props: {
-            {% for prop in component.meta.properties -%}
-            "{{ prop.name }}": {
-                label: "{{ prop.label }}",
-                {% if is_map(prop.input_type) -%}
-                    {% with flat_input(prop.input_type) as input_type -%}
-                    type: {
-                    {% for key, val in input_type -%}
-                        {{ key }}: "{{ val }}",
-                    {% endfor -%}
-                    }
-                    {% endwith %}
-                {% else -%}
-                    type: "{{ prop.input_type }}",
-                {% endif -%}
-            },
-            {%- endfor -%}
-        },
         data: {
             {% for key, val in component.meta.defaults -%}
             "{{ key }}": "{{ val }}",
