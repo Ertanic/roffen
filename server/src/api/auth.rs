@@ -84,7 +84,7 @@ pub fn login(mut ctx: ApiContext) -> BoxFuture<'static, Response> {
             let cookie = Cookie::build((AUTH_COOKIE_NAME, jwt))
                 .path("/")
                 .http_only(true)
-                .max_age(Duration::seconds(exp as i64))
+                .max_age(Duration::seconds(AUTH_EXP as i64))
                 .build();
 
             let mut response = if let Some(next) = ctx.query.get("next") {
