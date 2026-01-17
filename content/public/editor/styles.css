@@ -103,9 +103,6 @@ main.editor-layout {
     padding: 0.75rem;
     position: relative;
     cursor: grab;
-    display: flex;
-    align-items: center;
-    white-space: pre-wrap;
     word-break: break-word;
     overflow: auto;
 }
