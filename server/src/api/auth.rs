@@ -113,7 +113,11 @@ pub fn logout(ctx: ApiContext) -> BoxFuture<'static, Response> {
             make_response(StatusCode::OK, "logged out")
         };
 
-        let cookie = Cookie::build((AUTH_COOKIE_NAME, "_")).max_age(Duration::seconds(0)).build();
+        let cookie = Cookie::build((AUTH_COOKIE_NAME, "_"))
+            .max_age(Duration::seconds(0))
+            .path("/")
+            .http_only(true)
+            .build();
         let val = HeaderValue::from_str(&cookie.to_string()).expect("unable to build header value");
         response.headers_mut().insert("Set-Cookie", val);
 
