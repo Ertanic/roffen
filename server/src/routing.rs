@@ -200,9 +200,9 @@ impl Service<Request<Incoming>> for Bulldozer {
                         trace!("found page resource ref: {index:?}");
 
                         match (method, path.as_str(), &**auth) {
-                            (Method::GET, "/admin", None) => {
+                            (Method::GET, "/admin", None) | (Method::GET, "/admin/posts", None) | (Method::GET, "/admin/pages", None) => {
                                 trace!("found system path, redirecting to login page");
-                                return Ok(make_see_other("/admin/login?next=/admin"));
+                                return Ok(make_see_other(format!("/admin/login?next={path}").as_str()));
                             }
                             _ => {}
                         }
