@@ -110,6 +110,23 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
             !matches!(first, Value::None) && !matches!(second, Value::None)
         }
     });
+
+    engine.add_function("get_pages", {
+        let resources = Arc::clone(&resources);
+        move || {
+            tokio::task::block_in_place(|| {
+                let runtime = Handle::current();
+                let result = match runtime.block_on(async { resources.read().await.get_pages().await }) {
+                    Ok(pages) => runtime.block_on(async { pages.collect::<Vec<_>>().await }),
+                    Err(err) => {
+                        error!("unable to get pages list because {err}");
+                        return None;
+                    }
+                };
+                upon::to_value(result).ok()
+            })
+        }
+    });
 }
 
 fn posts_to_upon_values(runtime: Handle, stream_result: VfsResult<impl Stream<Item = Post>>) -> Option<Vec<Value>> {

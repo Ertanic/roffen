@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+    {% include "head" %}
+    {% include "styles" %}
+</head>
+<body>
+{% include "navbar" %}
+<main class="content-center full">
+    <div class="page-header">
+        <div>
+            <h2 style="margin:0">Pages</h2>
+            <p class="muted" style="margin:0.25rem 0 0 0">List of all blog public pages.</p>
+        </div>
+    </div>
+
+    {% with get_pages() as pages %}
+    <table class="posts-table">
+        <thead>
+        <tr>
+            <th>Tags</th>
+            <th>Link</th>
+            <th>Path</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            {% if not len(pages) %}
+            <td colspan="3" class="muted" style="padding:2rem; text-align:center">No pages, create one.</td>
+            {% else %}
+            {% for page in pages %}
+            <tr>
+                <td>
+                    {% for tag in page.tags %}
+                    <span class="badge {% if tag | eq: "system" %}draft{% else %}published{% endif %}">{{ tag }}</span>
+                    {% endfor %}
+                </td>
+                <td><a href="{{ page.link }}">{{ page.link }}</a></td>
+                <td>{{ page.path }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+        </tr>
+        </tbody>
+    </table>
+    {% endwith %}
+</main>
+</body>

@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::{
     env,
     fmt::{Display, Formatter},
@@ -5,7 +6,6 @@ use std::{
     path::Path,
     sync::Arc,
 };
-use serde::Serialize;
 use vfs::async_vfs::{AsyncOverlayFS, AsyncPhysicalFS, AsyncVfsPath};
 #[cfg(not(debug_assertions))]
 use {
@@ -37,7 +37,9 @@ pub async fn init_vfs(root: &Path) -> VirtualFS {
 #[cfg(debug_assertions)]
 pub async fn init_vfs(root: &Path) -> VirtualFS {
     let target_content = Path::new(&env::current_exe().unwrap().parent().unwrap()).join("content");
-    tokio::fs::create_dir_all(&target_content).await.expect("unable to create target content dir");
+    tokio::fs::create_dir_all(&target_content)
+        .await
+        .expect("unable to create target content dir");
 
     let target_content = AsyncPhysicalFS::new(target_content);
     let embed_content = AsyncPhysicalFS::new(root);
@@ -85,7 +87,7 @@ impl PageDir {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct VfsPath(String);
 
 impl VfsPath {
@@ -113,11 +115,17 @@ impl VfsPath {
     }
 
     pub fn parent(&self) -> Option<Self> {
-        self.0.split('/').next_back().map(|parent| Self(parent.to_owned()))
+        let components = self.0.split('/').collect::<Vec<_>>();
+        let count = components.len() - 1;
+        Some(Self::new(components.into_iter().take(count).collect::<Vec<_>>().join("/")))
     }
 
     pub fn join(&self, path: impl Into<VfsPath>) -> Self {
         Self(self.0.clone() + "/" + &path.into())
+    }
+
+    pub fn as_string(self) -> String {
+        self.0
     }
 }
 

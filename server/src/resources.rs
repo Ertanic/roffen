@@ -10,13 +10,21 @@ use crate::{
     vfs::{PageDir, VfsPath, VirtualFS},
 };
 use futures_util::{
-    AsyncReadExt, AsyncWriteExt, stream,
+    AsyncReadExt, AsyncWriteExt, Stream, stream,
     stream::{BoxStream, StreamExt},
 };
-use log::{debug, error, warn};
+use log::{debug, error, trace, warn};
 use ron::ser::PrettyConfig;
-use std::{env, path::PathBuf, sync::Arc};
+use serde::Serialize;
+use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
 use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+
+#[derive(Serialize)]
+pub struct PageInfo {
+    pub link: String,
+    pub path: VfsPath,
+    pub tags: Vec<String>,
+}
 
 pub enum GetPostsRequest {
     Full,
@@ -344,6 +352,89 @@ impl ResourceManager {
         file.read_to_string(&mut buf).await?;
 
         Ok(buf)
+    }
+
+    pub async fn get_pages(&self) -> VfsResult<BoxStream<'static, PageInfo>> {
+        let vfs = Arc::clone(&self.vfs);
+
+        let state = (
+            VecDeque::from([VfsPath::new(PAGES_FOLDER)]),
+            None::<(VfsPath, Box<dyn Unpin + Stream<Item = String> + Send>)>,
+        );
+
+        let stream = stream::unfold(state, move |(mut folders, mut current)| {
+            let vfs = Arc::clone(&vfs);
+
+            async move {
+                loop {
+                    if current.is_none() {
+                        let folder = folders.pop_front()?;
+
+                        match vfs.read_dir(&folder).await {
+                            Ok(reader) => {
+                                current = Some((folder, reader));
+                            }
+                            Err(err) => {
+                                error!("unable to read folder {folder} because {err}");
+                                continue;
+                            }
+                        }
+                    }
+
+                    let (folder, reader) = current.as_mut().unwrap();
+
+                    match reader.next().await {
+                        Some(entry) => {
+                            let path = folder.join(entry);
+                            let meta = match vfs.metadata(&path).await {
+                                Ok(meta) => meta,
+                                Err(err) => {
+                                    error!("unable to read metadata for {path} because {err}");
+                                    continue;
+                                }
+                            };
+
+                            if meta.file_type == VfsFileType::Directory {
+                                trace!("found folder {path}");
+                                folders.push_back(path);
+                                continue;
+                            }
+
+                            if path.filename() != INDEX_FILENAME {
+                                continue;
+                            }
+
+                            let normalized = path.strip_prefix(VfsPath::new(PAGES_FOLDER)).and_then(|p| p.parent());
+                            let Some(normalized) = normalized
+                            else {
+                                continue;
+                            };
+
+                            let mut tags = Vec::with_capacity(1);
+
+                            if normalized.starts_with(&VfsPath::new("admin")) {
+                                tags.push("system".to_owned());
+                            }
+                            else {
+                                tags.push("user".to_owned())
+                            }
+
+                            let link = normalized.as_string();
+
+                            return Some((PageInfo { link, path, tags }, (folders, current)));
+                        }
+
+                        None => {
+                            trace!("no more files in folder {folder}");
+                            current = None;
+                        }
+                    }
+                }
+            }
+        })
+        .boxed();
+
+        Ok(stream)
     }
 }
 
