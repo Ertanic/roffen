@@ -120,10 +120,24 @@ impl VfsPath {
         Some(Self::new(components.into_iter().take(count).collect::<Vec<_>>().join("/")))
     }
 
-    pub fn join(&self, path: impl Into<VfsPath>) -> Self {
-        Self(self.0.clone() + "/" + &path.into())
+    pub fn is_root(&self) -> bool {
+        self.0.is_empty() || self.0 == "/"
     }
 
+    pub fn join(&self, path: impl Into<VfsPath>) -> Self {
+        let path = path.into();
+        if path.is_root() {
+            return self.clone();
+        }
+        if path.0.starts_with('/') {
+            Self(self.0.clone() + &path)
+        }
+        else {
+            Self(self.0.clone() + "/" + &path)
+        }
+    }
+
+    // as_string because to_string already exists in Display trait
     pub fn as_string(self) -> String {
         self.0
     }

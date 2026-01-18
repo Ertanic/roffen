@@ -12,6 +12,7 @@ use crate::{
     api::{
         ApiContext,
         auth::{AuthContext, login, logout},
+        components::get_component_js,
         posts::{create_post, delete_post, get_posts, update_post},
     },
     consts::CONTENT_FOLDER,
@@ -32,7 +33,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{net::TcpListener, sync::RwLock};
-use crate::api::components::get_component_js;
+use crate::api::resources::get_resources_in_folder;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -99,6 +100,9 @@ async fn main() {
     router
         .add(get("/components/js/{comp}"), ResourceRefType::Api(Box::new(get_component_js)))
         .expect("failed to register get /api/components route");
+    router
+        .add(get("/api/resources"), ResourceRefType::Api(Box::new(get_resources_in_folder)))
+        .expect("failed to register get /api/resources route");
 
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;

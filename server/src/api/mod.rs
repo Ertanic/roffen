@@ -8,6 +8,7 @@ use crate::resources::ResourceManager;
 pub mod auth;
 pub mod posts;
 pub mod components;
+pub mod resources;
 
 pub struct ApiContext<'a> {
     pub params: Params<'a, 'a>,

@@ -1,5 +1,5 @@
 use crate::{
-    api::posts::Post,
+    api::{posts::Post, resources::ResourceInfo},
     resources::{GetPostsRequest, ResourceManager},
 };
 use futures_util::{Stream, StreamExt};
@@ -126,6 +126,53 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
                 upon::to_value(result).ok()
             })
         }
+    });
+
+    engine.add_function("get_resources", {
+        let resources = Arc::clone(&resources);
+        move |path: &Value| {
+            tokio::task::block_in_place(|| {
+                let runtime = Handle::current();
+                let path = if let Value::String(path) = path { path.as_str() } else { "/" };
+                let result = match runtime.block_on(async { resources.read().await.get_resources_in_folder(path).await }) {
+                    Ok(resources) => runtime.block_on(async { resources.collect::<Vec<_>>().await }),
+                    Err(err) => {
+                        error!("unable to get resources list because {err}");
+                        return upon::to_value(Vec::<ResourceInfo>::new()).ok();
+                    }
+                };
+                upon::to_value(result).ok()
+            })
+        }
+    });
+
+    engine.add_function(
+        "default",
+        |current: &Value, def: &Value| if matches!(current, Value::None) { def.clone() } else { current.clone() },
+    );
+
+    engine.add_function("split_path", |path: &str| {
+        let path = path.trim_matches('/');
+
+        if path.is_empty() {
+            return upon::to_value(Vec::<(String, String)>::new()).ok();
+        }
+
+        let components = path.split('/').collect::<Vec<_>>();
+        let mut result = Vec::with_capacity(components.len());
+        for (i, comp) in components.iter().enumerate() {
+            let mut link = String::new();
+            let mut j = 0;
+            while j < i {
+                link.push('/');
+                link.push_str(components[j]);
+                j += 1;
+            }
+            link.push('/');
+            link.push_str(comp);
+            result.push((comp, link));
+        }
+        upon::to_value(result).ok()
     });
 }
 

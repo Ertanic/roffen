@@ -4,6 +4,7 @@ use crate::{
         auth::AuthContext,
         components::{Component, ComponentMeta},
         posts::{Post, PostBody},
+        resources::{ResourceInfo, ResourceType},
     },
     consts::{AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER},
     routing::{MethodRouter, get},
@@ -433,6 +434,48 @@ impl ResourceManager {
             }
         })
         .boxed();
+
+        Ok(stream)
+    }
+
+    pub async fn get_resources_in_folder(&self, folder: &str) -> VfsResult<BoxStream<'static, ResourceInfo>> {
+        let folder = VfsPath::new(PUBLIC_FOLDER).join(folder);
+        trace!("getting resources in {folder} folder");
+
+        let exists = self.vfs.exists(&folder).await?;
+        if !exists {
+            return Err(VfsErrorKind::FileNotFound.into());
+        }
+
+        let meta = self.vfs.metadata(&folder).await?;
+        if meta.file_type != VfsFileType::Directory {
+            return Err(VfsErrorKind::InvalidPath.into());
+        }
+
+        let vfs = Arc::clone(&self.vfs);
+        let stream = vfs
+            .read_dir(&folder)
+            .await?
+            .map(move |f| folder.join(f))
+            .filter_map(move |f| {
+                let vfs = Arc::clone(&vfs);
+                async move {
+                    let meta = vfs.metadata(&f).await.ok()?;
+                    let link = f.strip_prefix(VfsPath::new(PUBLIC_FOLDER))?.as_string();
+                    Some(ResourceInfo {
+                        name: f.filename(),
+                        path: f.as_string(),
+                        link,
+                        resource_type: if matches!(meta.file_type, VfsFileType::Directory) {
+                            ResourceType::Directory
+                        }
+                        else {
+                            ResourceType::File
+                        },
+                    })
+                }
+            })
+            .boxed();
 
         Ok(stream)
     }

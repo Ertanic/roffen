@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+    {% include "head" %}
+    {% include "styles" %}
+</head>
+<body>
+{% include "navbar" %}
+<main class="content-center full">
+    <div class="page-header">
+        <div>
+            <h2 style="margin:0">Resources</h2>
+            <p class="muted" style="margin:0.25rem 0 0 0">List of all blog public resources in <a href="/admin/resources">/</a>
+                {% with split_path((query?.path | default: "/")) as path_comps %}
+                {% if len(path_comps) %}
+                {% for path in path_comps %}
+                <a href="/admin/resources?path={{ path.1 }}">{{ path.0 }}</a> /
+                {% endfor %}.
+                {% endif %}
+                {% endwith %}
+            </p>
+        </div>
+    </div>
+
+    {% with get_resources((query?.path | default: "/")) as resources %}
+    <table class="posts-table">
+        <thead>
+        <tr>
+            <th>Link</th>
+            <th>Path</th>
+            <th>Type</th>
+            <th>Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            {% if not len(resources) %}
+            <td colspan="4" class="muted" style="padding:2rem; text-align:center">No resources, upload one.</td>
+            {% else %}
+            {% for resource in resources %}
+            {% if resource.resource_type | eq: "file" %}
+            <tr>
+                <td><a href="{{ resource.link }}">/{{ resource.name }}</a></td>
+                <td>{{ resource.path }}</td>
+                <td>
+                    <span class="badge published">File</span>
+                </td>
+                <td>
+                    <button class="btn btn-primary">Download</button>
+                    <button class="btn btn-danger">Delete</button>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td><a href="/admin/resources?path={{ resource.link }}">/{{ resource.name }}/</a></td>
+                <td>{{ resource.path }}</td>
+                <td>
+                    <span class="badge draft">Folder</span>
+                </td>
+                <td>
+                    <button class="btn btn-danger">Delete</button>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+            {% endif %}
+        </tr>
+        </tbody>
+    </table>
+    {% endwith %}
+</main>
+</body>
