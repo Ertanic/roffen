@@ -6,7 +6,7 @@ use crate::{
         posts::{Post, PostBody},
         resources::{ResourceInfo, ResourceType},
     },
-    consts::{AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER},
+    consts::{AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER, SEC_FILENAME},
     routing::{MethodRouter, get},
     vfs::{PageDir, VfsPath, VirtualFS},
 };
@@ -16,7 +16,7 @@ use futures_util::{
 };
 use log::{debug, error, trace, warn};
 use ron::ser::PrettyConfig;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
 use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
 
@@ -30,6 +30,17 @@ pub struct PageInfo {
 pub enum GetPostsRequest {
     Full,
     Chunk { count: usize, offset: usize },
+}
+
+#[derive(Deserialize)]
+pub struct TlsContext {
+    pub cert: PathBuf,
+    pub key: PathBuf,
+}
+
+#[derive(Deserialize)]
+pub struct SecurityContext {
+    pub tls: TlsContext,
 }
 
 pub struct ResourceManager {
@@ -58,6 +69,21 @@ impl ResourceManager {
         debug!("auth context loaded");
 
         auth
+    }
+
+    pub async fn load_security(&self) -> Option<SecurityContext> {
+        let mut buf = String::new();
+        let filepath = VfsPath::new(SEC_FILENAME);
+
+        if let Ok(mut file) = self.vfs.open_file(&filepath).await {
+            file.read_to_string(&mut buf).await.expect("unable to read sec config file");
+            let sec = toml::from_str(&buf).expect("unable to parse security config file");
+            debug!("security context loaded");
+            Some(sec)
+        }
+        else {
+            None
+        }
     }
 
     pub async fn load_pages(&self, mut router: MethodRouter) -> MethodRouter {

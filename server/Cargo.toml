@@ -31,6 +31,7 @@ crossbeam-channel = "0.5.15"
 ron = "0.12.0"
 small_uid = "0.2.4"
 serde_json = "1.0.148"
+tokio-rustls = "0.26"
 
 [build-dependencies]
 glob = "0.3"

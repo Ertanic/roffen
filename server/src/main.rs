@@ -13,7 +13,7 @@ use crate::{
         ApiContext,
         auth::{AuthContext, login, logout},
         components::get_component_js,
-        posts::{create_post, delete_post, get_posts, update_post},
+        posts::{create_post, delete_post, get_posts, new_post, update_post},
         resources::get_resources_in_folder,
     },
     consts::CONTENT_FOLDER,
@@ -30,14 +30,20 @@ use hyper::{
     body::{Bytes, Frame},
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use log::info;
+use log::{error, info};
 use std::{
     fmt::{Debug, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
 use tokio::{net::TcpListener, sync::RwLock};
-use crate::api::posts::new_post;
+use tokio_rustls::{
+    TlsAcceptor,
+    rustls::{
+        ServerConfig,
+        pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+    },
+};
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -150,19 +156,74 @@ async fn main() {
 
     init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources));
 
-    loop {
-        let req = listener.accept().await.expect("failed to accept client");
-        let io = TokioIo::new(req.0);
+    let sec = resources.read().await.load_security().await;
+    if let Some(sec) = sec {
+        let certs_folder = root.join("certs");
+        let cert_path = if sec.tls.cert.is_absolute() {
+            sec.tls.cert
+        }
+        else {
+            certs_folder.join(&sec.tls.cert)
+        };
 
-        let bulldozer = bulldozer.clone();
+        let cert_key_path = if sec.tls.key.is_absolute() {
+            sec.tls.key
+        }
+        else {
+            certs_folder.join(&sec.tls.key)
+        };
 
-        tokio::task::spawn(async move {
-            if let Err(err) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                .serve_connection(io, bulldozer)
-                .await
-            {
-                eprintln!("Error serving connection: {}", err);
-            }
-        });
+        let cert = CertificateDer::pem_file_iter(cert_path)
+            .expect("unable to load certificate")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("unable to parse cert");
+
+        let key = PrivateKeyDer::from_pem_file(cert_key_path).expect("unable to parse private key");
+
+        let tls_config = ServerConfig::builder().with_no_client_auth().with_single_cert(cert, key).unwrap();
+        let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
+
+        info!("TLS is enabled");
+
+        loop {
+            let (tcp_stream, _) = listener.accept().await.expect("failed to accept client");
+            let tls_acceptor = tls_acceptor.clone();
+
+            let bulldozer = bulldozer.clone();
+
+            tokio::task::spawn(async move {
+                let tls_stream = match tls_acceptor.accept(tcp_stream).await {
+                    Ok(tls_stream) => tls_stream,
+                    Err(err) => {
+                        error!("failed to perform tls handshake: {err:#}");
+                        return;
+                    }
+                };
+
+                if let Err(err) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                    .serve_connection(TokioIo::new(tls_stream), bulldozer)
+                    .await
+                {
+                    error!("error serving connection: {}", err);
+                }
+            });
+        }
+    }
+    else {
+        loop {
+            let (tcp_stream, _) = listener.accept().await.expect("failed to accept client");
+            let io = TokioIo::new(tcp_stream);
+
+            let bulldozer = bulldozer.clone();
+
+            tokio::task::spawn(async move {
+                if let Err(err) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                    .serve_connection(io, bulldozer)
+                    .await
+                {
+                    eprintln!("Error serving connection: {}", err);
+                }
+            });
+        }
     }
 }

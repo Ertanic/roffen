@@ -27,7 +27,7 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
     dispatch
         .filter(|metadata| {
             let target = metadata.target();
-            !(target.starts_with("async_std") || target.starts_with("notify"))
+            !(target.starts_with("async_std") || target.starts_with("notify") || target.starts_with("rustls"))
         })
         .format(move |out, message, record| {
             out.finish(format_args!(
