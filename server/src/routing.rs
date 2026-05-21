@@ -100,20 +100,37 @@ impl MethodRouter {
     }
 }
 
+#[derive(Clone)]
+pub struct SystemPath {
+    pub path: &'static str,
+    pub method: Method,
+    pub auth_required: bool,
+}
+
+pub struct BulldozerContext {
+    pub router: Arc<RwLock<MethodRouter>>,
+    pub auth: Arc<AuthContext>,
+    pub vfs: VirtualFS,
+    pub resources: Arc<RwLock<ResourceManager>>,
+    pub system_paths: Vec<SystemPath>,
+}
+
 pub struct Bulldozer {
     router: Arc<RwLock<MethodRouter>>,
     auth: Arc<AuthContext>,
     vfs: VirtualFS,
     resources: Arc<RwLock<ResourceManager>>,
+    system_paths: Vec<SystemPath>,
 }
 
 impl Bulldozer {
-    pub fn new(router: Arc<RwLock<MethodRouter>>, auth: Arc<AuthContext>, vfs: VirtualFS, resources: Arc<RwLock<ResourceManager>>) -> Self {
+    pub fn new(ctx: BulldozerContext) -> Self {
         Self {
-            router,
-            auth,
-            vfs,
-            resources,
+            router: ctx.router,
+            auth: ctx.auth,
+            vfs: ctx.vfs,
+            resources: ctx.resources,
+            system_paths: ctx.system_paths,
         }
     }
 }
@@ -146,6 +163,8 @@ impl Service<Request<Incoming>> for Bulldozer {
                     .collect::<HashMap<String, String>>()
             })
             .unwrap_or_default();
+
+        let system_paths = self.system_paths.clone();
 
         let result = async move {
             let path_clone = path.clone();
@@ -199,12 +218,11 @@ impl Service<Request<Incoming>> for Bulldozer {
                     ResourceRefType::Page { index, layouts } => {
                         trace!("found page resource ref: {index:?}");
 
-                        match (method, path.as_str(), &**auth) {
-                            (Method::GET, "/admin", None) | (Method::GET, "/admin/posts", None) | (Method::GET, "/admin/pages", None) => {
+                        for sys_path in &system_paths {
+                            if sys_path.path == path && sys_path.method == method && (sys_path.auth_required && auth.is_none()) {
                                 trace!("found system path, redirecting to login page");
                                 return Ok(make_see_other(format!("/admin/login?next={path}").as_str()));
                             }
-                            _ => {}
                         }
 
                         trace!("init template engine...");
@@ -342,16 +360,13 @@ fn decode_jwt_from_cookies(cookies: &HashMap<String, String>, auth_context: &Aut
         if let Some(payload) = payload {
             if payload.claims.exp < jiff::Timestamp::now().as_second() as usize {
                 None
-            }
-            else {
+            } else {
                 Some(payload.claims)
             }
-        }
-        else {
+        } else {
             None
         }
-    }
-    else {
+    } else {
         None
     }
 }
