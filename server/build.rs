@@ -25,10 +25,11 @@ fn build_ts(release: bool) {
         .output()
         .unwrap();
 
-    let editor_script_output = project.join("content").join("public").join("editor").join("js").join("editor.js");
+    let editor_script_output = project.join("content").join("public").join("editor").join("js");
     let editor_script = editor_folder.join("out").join("index.js");
 
-    std::fs::copy(editor_script, editor_script_output).unwrap();
+    std::fs::create_dir_all(&editor_script_output).unwrap();
+    std::fs::copy(editor_script, editor_script_output.join("editor.js")).unwrap();
 
     // components
     let components_folder = project.join("components");
