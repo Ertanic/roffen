@@ -8,6 +8,8 @@ mod utils;
 mod vfs;
 mod watcher;
 
+use crate::api::resources::get_resources_in_folder;
+use crate::routing::{BulldozerContext, SystemPath};
 use crate::{
     api::{
         ApiContext,
@@ -24,6 +26,7 @@ use crate::{
 };
 use futures_util::{future::BoxFuture, stream};
 use http_body_util::StreamBody;
+use hyper::Method;
 use hyper::body::{Bytes, Frame};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use log::info;
@@ -33,7 +36,6 @@ use std::{
     sync::Arc,
 };
 use tokio::{net::TcpListener, sync::RwLock};
-use crate::api::resources::get_resources_in_folder;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -108,7 +110,38 @@ async fn main() {
     let router = resources.read().await.load_pages(router).await;
 
     let router = Arc::new(RwLock::new(router));
-    let bulldozer = Arc::new(Bulldozer::new(Arc::clone(&router), auth_context, vfs, Arc::clone(&resources)));
+
+    let system_paths = vec![
+        SystemPath {
+            path: "/admin",
+            method: Method::GET,
+            auth_required: true,
+        },
+        SystemPath {
+            path: "/admin/posts",
+            method: Method::GET,
+            auth_required: true,
+        },
+        SystemPath {
+            path: "/admin/pages",
+            method: Method::GET,
+            auth_required: true,
+        },
+        SystemPath {
+            path: "/admin/resources",
+            method: Method::GET,
+            auth_required: true,
+        },
+    ];
+
+    let ctx = BulldozerContext {
+        router: Arc::clone(&router),
+        resources: Arc::clone(&resources),
+        auth: auth_context,
+        vfs,
+        system_paths,
+    };
+    let bulldozer = Arc::new(Bulldozer::new(ctx));
 
     init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources));
 
