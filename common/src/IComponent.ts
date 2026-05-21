@@ -12,6 +12,7 @@ export interface IComponentHooks {
 }
 
 export interface IComponent {
+    name: string;
     hooks: IComponentHooks;
     title: string;
     html: string;

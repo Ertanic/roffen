@@ -1,6 +1,7 @@
 import {propertiesBody} from "./common.ts";
 import {markDirty} from "./save-content.ts";
 import type {
+    IComponentFetchDataContext,
     IComponentInitPropsContext,
     IComponentMountContext,
     IComponentNormalizeContext
@@ -172,9 +173,9 @@ export class ComponentInitPropsContext implements IComponentInitPropsContext {
     }
 }
 
-export class ComponentFetchDataContext {
-    private el: HTMLElement;
-    private data: DataMap;
+export class ComponentFetchDataContext implements IComponentFetchDataContext {
+    public el: HTMLElement;
+    public data: DataMap;
 
     constructor(el: HTMLElement, data: DataMap) {
         this.el = el;
