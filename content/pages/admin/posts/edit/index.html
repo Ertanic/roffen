@@ -82,37 +82,24 @@
 </main>
 
 <script>
-    const post_id = '{{ post.id }}';
-</script>
-
-{%- for name, component in components %}
-<script src="/components/js/{{ name }}"></script>
-{%- endfor %}
-
-<script>
-    const componentsRegistry = new Map();
-
-    {% for name, component in components -%}
-    componentsRegistry.set("{{ name }}", {
-        hooks: {{ name }}Component,
-        html: "{{ component.meta.html }}",
-        title: "{{ component.meta.title }}",
-        data: {
-            {% for key, val in component.meta.defaults -%}
-            "{{ key }}": "{{ val }}",
-            {% endfor -%}
+    const components = [
+        {%- for name, component in components %}
+        {
+            id: "{{ name }}",
+            path: "/components/js/{{ name }}",
+            html: "{{ component.meta.html }}",
+            title: "{{ component.meta.title }}",
+            data: {
+                {% for key, val in component.meta.defaults -%}
+                "{{ key }}": "{{ val }}",
+                {%- endfor %}
+            },
         },
-    });
-    {% endfor %}
+        {%- endfor %}
+    ];
 </script>
 
-<script src="/editor/js/component-contexts.js"></script>
-<script src="/editor/js/drag-n-drop.js"></script>
-<script src="/editor/js/properties.js"></script>
-<script src="/editor/js/normalize-components.js"></script>
-<script src="/editor/js/delete-btn.js"></script>
-<script src="/editor/js/edit-title.js"></script>
-<script src="/editor/js/save-content.js"></script>
+<script src="/editor/js/editor.js"></script>
 
 {% endwith %}
 {% endwith %}

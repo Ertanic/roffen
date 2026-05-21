@@ -1,7 +1,22 @@
+import {get_query} from "./common.ts";
+
 const titleText = document.getElementById("article-title-text");
 const editBtn = document.getElementById("title-edit-btn");
 
-editBtn.addEventListener("click", () => {
+editBtn?.addEventListener("click", () => {
+    if (!titleText) {
+        console.error("no article title element found");
+        return;
+    }
+
+    const query = get_query();
+    const post_id = query["id"];
+
+    if (!post_id) {
+        console.error("no post id found");
+        return;
+    }
+
     const current = titleText.innerText;
 
     const next = prompt("Edit article title", current);

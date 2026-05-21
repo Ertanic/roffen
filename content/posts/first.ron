@@ -1,0 +1,15 @@
+PostBody(
+    draft: true,
+    author: "test",
+    created_at: 1758233200,
+    title: "test",
+    content: [
+        PostComponent(
+            name: "title",
+            data: {
+                "level": "1",
+                "content": "test",
+            }
+        )
+    ],
+)

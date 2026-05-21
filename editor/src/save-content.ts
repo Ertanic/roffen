@@ -1,38 +1,55 @@
+import {ComponentFetchDataContext} from "./component-contexts.ts";
+import {componentsRegistry, get_query} from "./common.ts";
+
 let hasChanges = false;
 const saveIndicator = document.getElementById("save-indicator");
-let saveIndicatorTimeout = null;
+let saveIndicatorTimeout: NodeJS.Timeout | null = null;
 
-function markDirty() {
+type Block = {
+    name: string;
+    data: Record<string, string>;
+}
+
+export function markDirty() {
     hasChanges = true;
 }
 
 function showSaved() {
-    saveIndicator.classList.add("visible");
+    saveIndicator?.classList.add("visible");
+
+    if (!saveIndicatorTimeout) {
+        return;
+    }
 
     clearTimeout(saveIndicatorTimeout);
     saveIndicatorTimeout = setTimeout(() => {
-        saveIndicator.classList.remove("visible");
+        saveIndicator?.classList.remove("visible");
     }, 2000);
 }
 
 function collectContent() {
-    const blocks = [];
+    const blocks: Block[] = [];
 
-    document.querySelectorAll(".grid-block").forEach(block => {
-        let data = {
+    document.querySelectorAll(".grid-block").forEach((el: Element) => {
+        const block = el as HTMLDivElement;
+
+        let data: Record<string, string> = {
             col: block.dataset.col ?? "12",
             row: block.dataset.row ?? "1",
         }
 
-        const ctx = new ComponentFetchDataContext(block, data);
-        const comp = componentsRegistry.get(block.dataset.type);
+        const type = block.dataset.type;
+        if (!type) return;
 
-        if (comp.hooks.fetchData) {
+        const ctx = new ComponentFetchDataContext(block, data);
+        const comp = componentsRegistry.get(type);
+
+        if (comp?.hooks.fetchData) {
             data = {...data, ...comp.hooks.fetchData(ctx)};
         }
 
         blocks.push({
-            name: block.dataset.type,
+            name: type,
             data,
         });
     });
@@ -41,6 +58,14 @@ function collectContent() {
 }
 
 function saveContent() {
+    const query = get_query();
+    const post_id = query["id"];
+
+    if (!post_id) {
+        console.error("No post_id found in query");
+        return;
+    }
+
     const new_content = collectContent();
     const body = JSON.stringify({
         post_id,

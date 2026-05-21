@@ -1,10 +1,12 @@
-const titleComponent = {
+import type {IComponentHooks} from "common/src/IComponent.ts";
+
+export const hooks: IComponentHooks = {
     initProps: ctx => {
         ctx.createTextarea("Content",
             ctx.data.content ?? ctx.el.innerText,
             value => {
-                cancelAnimationFrame(ctx.refs.content)
-                ctx.refs.content = requestAnimationFrame(() => {
+                ctx.cancelAnimationFrame(ctx.refs)
+                ctx.requestAnimationFrame(() => {
                     ctx.keepBlockInView(() => {
                         ctx.el.children[0].innerText = value;
                         ctx.autoResizeRows();
@@ -14,22 +16,24 @@ const titleComponent = {
 
         ctx.createNumber(
             "Level",
-            ctx.el.dataset.level ?? ctx.data.level ?? 1,
-            1,
-            6,
+            ctx.el.dataset.level ?? ctx.data.level ?? "1",
+            "1",
+            "6",
             value => {
                 ctx.el.innerHTML = `<h${value}>${ctx.el.children[0].innerText}</h${value}>`;
                 ctx.el.dataset.level = value;
             });
     },
+
     fetchData: ctx => {
         return {
             content: ctx.el.children[0].innerText,
             level: ctx.el.dataset.level,
         }
     },
+
     normalize: ctx => {
         const level = ctx.el.dataset.level ?? ctx.data.level ?? 1;
         ctx.el.innerHTML = `<h${level}>${ctx.el.children[0].innerText}</h${level}>`;
     },
-}
+};

@@ -1,1 +1,3 @@
-target
+target/
+temp/
+content/components/

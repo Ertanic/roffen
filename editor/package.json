@@ -1,0 +1,19 @@
+{
+  "name": "editor",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "build": "bun build --outdir out ./index.ts"
+  },
+  "dependencies": {
+    "common": "file:../common",
+    "query-string": "^9.3.1"
+  }
+}
