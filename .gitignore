@@ -1,3 +1,4 @@
 target/
 temp/
 content/components/
+content/public/editor/js/

@@ -12,6 +12,7 @@
     "common": "file:../../common"
   },
   "scripts": {
-    "build": "bun build --outdir out ./index.ts"
+    "build": "bun build --outdir out ./index.ts",
+    "build-prod": "bun build --outdir out ./index.ts --production"
   }
 }

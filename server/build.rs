@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
 fn main() {
+    build_ts(!cfg!(debug_assertions));
+}
+
+fn build_ts(release: bool) {
     let bun = std::process::Command::new("bun").args(["--version"]).output().unwrap().status.success();
     if !bun {
         panic!("no bun found");
@@ -13,8 +17,10 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}/*", editor_folder.display());
 
+    let build_name = if release { "build-prod" } else { "build" };
+
     std::process::Command::new("bun")
-        .args(["run", "build"])
+        .args(["run", build_name])
         .current_dir(&editor_folder)
         .output()
         .unwrap();
@@ -46,13 +52,13 @@ fn main() {
         }
 
         if std::process::Command::new("bun")
-            .args(["run", "build"])
+            .args(["run", build_name])
             .current_dir(&path)
             .output()
             .is_err()
         {
             std::process::Command::new("bun")
-                .args(["build", "--outdir", "out", "./index.ts"])
+                .args(["build", "--outdir", "out", "./index.ts", if release { "--production" } else { "" }])
                 .current_dir(&path)
                 .output()
                 .unwrap();

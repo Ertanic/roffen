@@ -43,7 +43,6 @@ pub struct PostBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     updated_at: Option<u64>,
     title: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     content: Vec<PostComponent>,
 }
 
