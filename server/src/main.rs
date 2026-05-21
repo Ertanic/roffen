@@ -8,26 +8,27 @@ mod utils;
 mod vfs;
 mod watcher;
 
-use crate::api::resources::get_resources_in_folder;
-use crate::routing::{BulldozerContext, SystemPath};
 use crate::{
     api::{
         ApiContext,
         auth::{AuthContext, login, logout},
         components::get_component_js,
         posts::{create_post, delete_post, get_posts, update_post},
+        resources::get_resources_in_folder,
     },
     consts::CONTENT_FOLDER,
     logs::setup_logger,
     resources::{ResourceManager, get_root},
-    routing::{Bulldozer, MethodRouter, delete, get, patch, post},
+    routing::{Bulldozer, BulldozerContext, MethodRouter, SystemPath, delete, get, patch, post},
     vfs::{PageLayout, VfsPath, init_vfs},
     watcher::init_watcher,
 };
 use futures_util::{future::BoxFuture, stream};
 use http_body_util::StreamBody;
-use hyper::Method;
-use hyper::body::{Bytes, Frame};
+use hyper::{
+    Method,
+    body::{Bytes, Frame},
+};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use log::info;
 use std::{
@@ -36,6 +37,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{net::TcpListener, sync::RwLock};
+use crate::api::posts::new_post;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -105,6 +107,9 @@ async fn main() {
     router
         .add(get("/api/resources"), ResourceRefType::Api(Box::new(get_resources_in_folder)))
         .expect("failed to register get /api/resources route");
+    router
+        .add(get("/admin/posts/new"), ResourceRefType::Api(Box::new(new_post)))
+        .expect("failed to register get /admin/posts/new route");
 
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;

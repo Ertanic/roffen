@@ -3,7 +3,7 @@ use crate::{
     api::ApiContext,
     resources::GetPostsRequest,
     utils,
-    utils::{make_bad_request, make_internal_error, make_json_response, make_no_content, make_not_found, make_unauthorized},
+    utils::{make_bad_request, make_internal_error, make_json_response, make_no_content, make_not_found, make_see_other, make_unauthorized},
 };
 use futures_util::{StreamExt, future::BoxFuture, stream, stream::BoxStream};
 use http_body_util::{BodyExt, StreamBody};
@@ -246,6 +246,35 @@ pub fn get_posts(ctx: ApiContext) -> BoxFuture<'static, Response> {
         else {
             trace!("fetched full posts list");
             make_response(resources.get_posts(GetPostsRequest::Full).await)
+        }
+    })
+}
+
+pub fn new_post(ctx: ApiContext) -> BoxFuture<'static, Response> {
+    Box::pin(async move {
+        if let Some(jwt) = ctx.jwt {
+            let id = SmallUid::new().to_string();
+            let content = PostBody {
+                title: format!("Post {id}"),
+                created_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                draft: true,
+                author: jwt.username,
+                content: vec![],
+                updated_at: None,
+            };
+            let post = Post { id: id.clone(), content };
+
+            if let Err(err) = ctx.resources.write().await.save_post(&post).await {
+                error!("unable to save {} post file because {err}", id);
+                make_internal_error()
+            }
+            else {
+                info!("new post {id} has been saved successfully, redirecting to edit page");
+                make_see_other(&format!("/admin/posts/edit?id={id}"))
+            }
+        }
+        else {
+            make_unauthorized()
         }
     })
 }
