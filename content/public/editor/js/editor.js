@@ -1713,7 +1713,7 @@ var propertiesBody = document.getElementById("properties-body");
 var query_cache = null;
 function get_query() {
   if (!query_cache) {
-    query_cache = default2.parse(location.search);
+    query_cache = default2.parse(location.search.slice(1, location.search.length));
   }
   return query_cache;
 }
@@ -1725,12 +1725,18 @@ var saveIndicatorTimeout = null;
 function markDirty() {
   hasChanges = true;
 }
+function markedDirty() {
+  return hasChanges;
+}
+function unmarkDirty() {
+  hasChanges = false;
+}
 function showSaved() {
   saveIndicator?.classList.add("visible");
-  if (!saveIndicatorTimeout) {
+  if (saveIndicatorTimeout) {
+    clearTimeout(saveIndicatorTimeout);
     return;
   }
-  clearTimeout(saveIndicatorTimeout);
   saveIndicatorTimeout = setTimeout(() => {
     saveIndicator?.classList.remove("visible");
   }, 2000);
@@ -1785,12 +1791,6 @@ function saveContent() {
     }
   }, (err) => console.error(err));
 }
-setInterval(() => {
-  if (!hasChanges)
-    return;
-  saveContent();
-  hasChanges = false;
-}, 5000);
 
 // src/component-contexts.ts
 class ComponentMountContext {
@@ -2157,20 +2157,29 @@ function normalizeComponents(block) {
 }
 
 // src/import-components.ts
+var componentsPromises = [];
 for (const comp of components) {
-  import(comp.path).then((componentHooks) => {
-    console.log("imported (" + comp.id + "): ", componentHooks);
-    const component = {
-      hooks: componentHooks.hooks,
+  componentsPromises.push(import(comp.path).then((componentInfo) => {
+    return {
+      ...componentInfo,
+      name: comp.id,
       html: comp.html,
       title: comp.title,
       data: comp.data
     };
-    componentsRegistry.set(comp.id, component);
-  }).then(() => {
-    console.log("all components imported, init systems");
-    initDrag();
-    initDeleteButton();
-    document.querySelectorAll(".grid-block").forEach((el) => normalizeComponents(el));
-  });
+  }));
 }
+Promise.all(componentsPromises).then((components2) => {
+  for (const comp of components2) {
+    componentsRegistry.set(comp.name, comp);
+  }
+  setInterval(() => {
+    if (!markedDirty())
+      return;
+    saveContent();
+    unmarkDirty();
+  }, 5000);
+  initDrag();
+  initDeleteButton();
+  document.querySelectorAll(".grid-block").forEach((el) => normalizeComponents(el));
+});

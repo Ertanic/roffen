@@ -38,6 +38,8 @@ fn main() {
             panic!("{} is not a directory", path.display());
         }
 
+        println!("cargo:rerun-if-changed={}/*", path.display());
+
         let out_folder = path.join("out");
         if out_folder.exists() {
             std::fs::remove_dir_all(&out_folder).unwrap();

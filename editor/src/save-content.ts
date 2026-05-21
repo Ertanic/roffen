@@ -14,14 +14,22 @@ export function markDirty() {
     hasChanges = true;
 }
 
+export function markedDirty(): boolean {
+    return hasChanges;
+}
+
+export function unmarkDirty() {
+    hasChanges = false;
+}
+
 function showSaved() {
     saveIndicator?.classList.add("visible");
 
-    if (!saveIndicatorTimeout) {
+    if (saveIndicatorTimeout) {
+        clearTimeout(saveIndicatorTimeout);
         return;
     }
 
-    clearTimeout(saveIndicatorTimeout);
     saveIndicatorTimeout = setTimeout(() => {
         saveIndicator?.classList.remove("visible");
     }, 2000);
@@ -57,7 +65,7 @@ function collectContent() {
     return blocks;
 }
 
-function saveContent() {
+export function saveContent() {
     const query = get_query();
     const post_id = query["id"];
 
@@ -90,10 +98,3 @@ function saveContent() {
         err => console.error(err)
     );
 }
-
-setInterval(() => {
-    if (!hasChanges) return;
-
-    saveContent();
-    hasChanges = false;
-}, 5000);
