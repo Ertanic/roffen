@@ -1,0 +1,17 @@
+{
+  "name": "title",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "common": "file:../../common"
+  },
+  "scripts": {
+    "build": "bun build --outdir out ./index.ts"
+  }
+}
