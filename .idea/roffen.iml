@@ -10,6 +10,11 @@
       <excludeFolder url="file://$MODULE_DIR$/content/public/editor/js" />
       <excludeFolder url="file://$MODULE_DIR$/editor/out" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/certs" />
+      <excludeFolder url="file://$MODULE_DIR$/content/public/main/js" />
+      <excludeFolder url="file://$MODULE_DIR$/main/out" />
+      <excludeFolder url="file://$MODULE_DIR$/components/img/out" />
+      <excludeFolder url="file://$MODULE_DIR$/content/public/main/css" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

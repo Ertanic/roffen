@@ -4,16 +4,17 @@ import type {
     IComponentFetchDataContext,
     IComponentInitPropsContext,
     IComponentMountContext,
-    IComponentNormalizeContext
+    IComponentNormalizeContext,
+    IComponentSetSizeContext
 } from "common/src/contexts.ts";
 
 type DataMap = Record<string, string>;
 
 export class ComponentMountContext implements IComponentMountContext {
-    private el: HTMLElement;
-    private html: string;
-    private data: DataMap;
-    private title: string;
+    public el: HTMLElement;
+    public html: string;
+    public data: DataMap;
+    public title: string;
 
     constructor(el: HTMLElement, html: string, data: DataMap, title: string) {
         this.el = el;
@@ -23,9 +24,9 @@ export class ComponentMountContext implements IComponentMountContext {
     }
 }
 
-export class ComponentSetSizeContext {
-    private el: HTMLElement;
-    private data: DataMap;
+export class ComponentSetSizeContext implements IComponentSetSizeContext {
+    public el: HTMLElement;
+    public data: DataMap;
 
     constructor(el: HTMLElement, data: DataMap) {
         this.el = el;

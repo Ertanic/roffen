@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+    {% include "head" %}
+    <style>
+        #contents-table {
+            position: sticky;
+            top: 3em;
+            height: fit-content;
+        }
+    </style>
+</head>
+<body>
+{% include "header" %}
+
+<main>
+    <div class="flex three two">
+        <section id="contents-table" class="center flow">
+            <h1>Contents</h1>
+            <ul id="contents-table-list"></ul>
+        </section>
+        <section id="content">
+            <article>
+                <h1>About</h1>
+                <p>Roffen is a little file-flat CMS for your personal blog. You can use it to create and manage your
+                    blog posts, and it will help you to keep track of your content.</p>
+                <p>It means that you can easily create or modify an existing file so that the changes are applied in
+                    real time.</p>
+                <p>Alternatively, you can use the interactive article editor in the <a href="/admin/posts">admin
+                    panel</a>.</p>
+                <p>The pages editor is in development. You can follow the development process in the <a
+                        href="https://github.com/Ertanic/roffen">repository</a>.</p>
+
+                <h2>Another plans</h2>
+                <ul>
+                    <li>translating</li>
+                    <li>adding more components</li>
+                    <li>adding themes support</li>
+                </ul>
+            </article>
+
+            <article>
+                <h1>Pages</h1>
+                <p>Since the page editor is still under development, you will have to create pages manually.</p>
+                <p>To do this, create an <code>index.html</code> file in <code>content/pages/</code>. This action will
+                    override the existing main page. To create or override a subpage like <code>/posts</code>, create an
+                    <code>index.html</code> file in <code>content/pages/posts/</code>.</p>
+
+                <p>It is also worth noting that templates have the property of inheritance, which means that the
+                    <code>header.html</code> template can also be used in <code>content/pages/posts/index.html</code>.
+                </p>
+
+                <pre class="mermaid center">
+                    treeView-beta
+                        "content"
+                            "pages"
+                                "index.html"
+                                "header.html"
+                                "posts"
+                                    "index.html"
+                </pre>
+
+                <h2>Templates</h2>
+                <p>The engine uses upon for page templates, which is a simple yet powerful engine. You can read more
+                    about it in its <a href="https://docs.rs/upon/latest/upon/">documentation</a>.</p>
+                <p>Let's talk about the functions that are implemented and registered in the engine.</p>
+                <ul>
+                    <li><code>is_map(val) -> bool</code> - checks if the current value is a map.</li>
+                    <li><code>len(val) -> i64</code> - get the length of the current value.</li>
+                    <li><code>date(timestamp, format) -> string</code> - formats a timestamp into a date string.</li>
+                    <li><code>eq(left, right) -> bool</code> - checks if two values are equal.</li>
+                    <li><code>and(first, second) -> bool</code> - checks if two values are both true.</li>
+                    <li><code>default
+                        <T>(val, default) -> T
+                    </code> - returns the default value if the current value is empty.
+                    </li>
+                    <li><code>all_posts() -> Post[]</code> - returns all posts.</li>
+                    <li><code>posts(count, offset) -> Post[]</code> - returns a list of posts.</li>
+                    <li><code>get_post_by_id(id) -> Post</code> - returns a post by its ID.</li>
+                    <li><code>get_pages() -> Page</code> - returns all pages.</li>
+                </ul>
+
+                <p>In addition to functions, the following values are passed to templates:</p>
+                <ul>
+                    <li><code>auth: Option&lt;JwtPayload&gt;</code> - authentication status.</li>
+                    <li><code>query: Map&lt;string, string&gt;</code> - query parameters.</li>
+                </ul>
+
+                <p>Let's now look at the fields of structures that are returned from functions and constants.</p>
+                <pre><code class="language-rust">
+struct Post {
+    id: String,
+    content: {
+        draft: bool,
+        author: String,
+        created_at: u64,
+        updated_at: Option&lt;u64&gt;,
+        title: String,
+        content: Vec&lt;PostComponent&gt;,
+    },
+}
+
+struct PostComponent {
+    name: String,
+    data: HashMap&lt;String, String&gt;,
+}
+
+struct Page {
+    link: String,
+    path: VfsPath,
+    tags: Vec&lt;String&gt;,
+}
+
+struct JwtPayload {
+    pub username: String,
+    pub exp: usize,
+}
+                </code></pre>
+            </article>
+
+            <article>
+                <h1>Components</h1>
+                <p>The engine is somewhat modular, which means that you can write your own components, connect them to
+                    the engine, and use them in your own articles.</p>
+                <p>Each module must contain/compile <code>index.js</code> and <code>meta.ron</code> and be located in
+                    the corresponding directory
+                    under <code>content/components/</code>.</p>
+                <pre class="mermaid center">
+                    treeView-beta
+                        "content"
+                            "components"
+                                "img"
+                                    "index.js"
+                                    "meta.ron"
+                                "title"
+                                    "index.js"
+                                    "meta.ron"
+                                "text"
+                                    "index.js"
+                                    "meta.ron"
+                </pre>
+                <p>First, let's explore the component's life cycle. In general, everything is clear here, except for the
+                    difference between <code>mount</code> and <code>normalize</code>. The only difference is that <code>mount</code>
+                    is triggered by a drag
+                    event, while <code>normalize</code> is triggered by page loading and converts the component
+                    according to its
+                    properties.</p>
+                <pre class="mermaid center">
+                    flowchart TD
+                        A[mount] --> B[set size]
+                        B --> C[normalize]
+                        C --> D[init props]
+                        D --> E{has changes?}
+                        E -->|yes| I[fetch data]
+                        I -->|data from props| E
+                </pre>
+                <p>Let's try to implement the image component. To do this, create a project with the following
+                    content:</p>
+                <ul>
+                    <li>
+                        <div>
+                            <code>index.ts</code>:
+                            <pre><code class="language-typescript">
+import type {IComponentHooks} from "common/src/IComponent.ts";
+
+export const hooks: IComponentHooks = {
+    mount: ctx => {
+        const previewEl = document.createElement("img");
+        const source = ctx.data.source;
+
+        if (!source) {
+            console.error("no source link");
+            return;
+        }
+
+        previewEl.src = source;
+
+        ctx.el.classList.add("component-image");
+
+        ctx.el.appendChild(previewEl);
+    },
+    setSize: ctx => {
+        if (!ctx.data.row || !ctx.data.col) {
+            console.warn("no row or column parameter in component");
+            return;
+        }
+
+        ctx.setRow(Number(ctx.data.row));
+        ctx.setCol(Number(ctx.data.col));
+    },
+    initProps: ctx => {
+        ctx.createUrlSource(
+            "Image url",
+            ctx.data.source ?? (ctx.el.children.item(0) as HTMLImageElement)?.src,
+            value => {
+                const child = ctx.el.children.item(0) as HTMLImageElement;
+
+                if (!child) {
+                    console.error("no child element");
+                    return;
+                }
+
+                if (value) {
+                    child.src = value;
+                    ctx.data.source = value;
+                } else if (ctx.data.source) {
+                    child.src = ctx.data.source;
+                }
+            });
+    },
+    fetchData: ctx => {
+        const child = ctx.el.children.item(0) as HTMLImageElement;
+
+        if (!child) {
+            return {
+                source: "",
+            };
+        } else {
+            return {
+                source: child.src,
+            }
+        }
+    }
+}
+                            </code></pre>
+                        </div>
+                    </li>
+                    <li>
+                        <div>
+                            <code>meta.ron</code>
+                            <pre><code class="language-rust">
+ComponentMeta(
+    name: "image",
+    title: "Image",
+    html: "img",
+    defaults: {
+        "source": "/editor/img/image-placeholder.png",
+        "row": "4",
+        "col": "6",
+    }
+)
+                            </code></pre>
+                        </div>
+                    </li>
+                </ul>
+
+                <p>Now we can use this component in the editor.</p>
+                <img src="/examples/img_component.png" alt="img component">
+            </article>
+        </section>
+    </div>
+</main>
+</body>
+<script src="/main/js/index.js"></script>
+</html>

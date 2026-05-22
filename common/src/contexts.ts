@@ -1,9 +1,20 @@
 type DataMap = Record<string, string>;
 
 export interface IComponentMountContext {
+    get el(): HTMLElement;
+
+    get html(): string;
+
+    get data(): DataMap;
+
+    get title(): string;
 }
 
 export interface IComponentSetSizeContext {
+    get el(): HTMLElement;
+
+    get data(): DataMap;
+
     setRow(size: number): void;
 
     setCol(size: number): void;

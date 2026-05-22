@@ -1,0 +1,19 @@
+{
+  "name": "main",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "build": "bun build --outdir out index.ts",
+    "build-prod": "bun build --outdir out index.ts --production"
+  },
+  "dependencies": {
+    "highlight.js": "^11.11.1",
+    "mermaid": "^11.15.0"
+  }
+}

@@ -1,0 +1,10 @@
+ComponentMeta(
+    name: "image",
+    title: "Image",
+    html: "img",
+    defaults: {
+        "source": "/editor/img/image-placeholder.png",
+        "row": "4",
+        "col": "6",
+    }
+)

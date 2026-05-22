@@ -76,4 +76,23 @@ fn build_ts(release: bool) {
         let dest_file = dest_folder.join("index.js");
         std::fs::copy(out_file, dest_file).expect("failed to copy index.js");
     }
+
+    // main
+    let main_project = project.join("main");
+    println!("cargo:rerun-if-changed={}/*", main_project.display());
+    std::process::Command::new("bun")
+        .args(["run", build_name])
+        .current_dir(&main_project)
+        .output()
+        .unwrap();
+
+    let main_output = project.join("content").join("public").join("main").join("js");
+    let main_script = main_project.join("out").join("index.js");
+    std::fs::create_dir_all(&main_output).unwrap();
+    std::fs::copy(main_script, main_output.join("index.js")).unwrap();
+
+    let main_css_output = project.join("content").join("public").join("main").join("css");
+    let main_css = main_project.join("out").join("index.css");
+    std::fs::create_dir_all(&main_css_output).unwrap();
+    std::fs::copy(main_css, main_css_output.join("index.css")).unwrap();
 }
