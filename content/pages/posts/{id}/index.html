@@ -19,6 +19,13 @@
             }
         }
     </style>
+    {% with get_post_by_id(params.id) as post %}
+    {% if post %}
+        {% if not post.draft %}
+            <title>{{ post.title }}</title>
+        {% endif %}
+    {% endif %}
+    {% endwith %}
 </head>
 <body>
 {% include "header" %}
