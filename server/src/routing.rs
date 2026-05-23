@@ -177,155 +177,163 @@ impl Service<Request<Incoming>> for Bulldozer {
             let cookies_jwt = Arc::clone(&cookies);
             let auth = Arc::new(LazyLock::new(move || decode_jwt_from_cookies(&cookies_jwt, &auth_ctx)));
 
-            match result {
-                Ok(result) => match result.value {
-                    ResourceRefType::Content(content) => {
-                        trace!("found content resource ref");
-                        let content = content.clone();
-                        let stream = stream::once(async { Ok::<Frame<Bytes>, std::io::Error>(Frame::data(content)) });
-                        let stream: BoxStream = Box::pin(stream);
-                        let body = StreamBody::new(stream);
-                        Ok(Response::new(body))
-                    }
-                    ResourceRefType::File(path) => {
-                        trace!("found file resource ref: {path:?}");
-                        let file = match vfs.open_file(path).await {
-                            Ok(f) => f,
-                            Err(err) => {
-                                error!("failed to open {path} file because {err}");
-                                return Ok(make_not_found());
-                            }
-                        };
-
-                        // convert async-std `Read` to tokio `AsyncRead`
-                        let file = tokio_util::compat::FuturesAsyncReadCompatExt::compat(file);
-
-                        let reader = ReaderStream::new(file);
-                        let stream: BoxStream = Box::pin(StreamBody::new(
-                            reader.filter_map(|buf| if let Ok(buf) = buf { Some(Ok(Frame::data(buf))) } else { None }),
-                        ));
-                        let body = StreamBody::new(stream);
-                        let mut response = Response::new(body);
-
-                        if let Some(mime) = mime_guess2::from_path(path).first() {
-                            response
-                                .headers_mut()
-                                .insert("Content-Type", HeaderValue::from_str(mime.as_ref()).expect("mime error"));
-                        }
-
-                        Ok(response)
-                    }
-                    ResourceRefType::Page { index, layouts } => {
-                        trace!("found page resource ref: {index:?}");
-
-                        for sys_path in &system_paths {
-                            if sys_path.path == path && sys_path.method == method && (sys_path.auth_required && auth.is_none()) {
-                                trace!("found system path, redirecting to login page");
-                                return Ok(make_see_other(format!("/admin/login?next={path}").as_str()));
-                            }
-                        }
-
-                        trace!("init template engine...");
-                        let mut engine = upon::Engine::new();
-
-                        for layout in layouts {
-                            let mut content = String::new();
-
-                            let mut file = match vfs.open_file(&layout).await {
-                                Ok(f) => f,
-                                Err(err) => {
-                                    error!("failed to open {layout} file because {err}");
-                                    continue;
-                                }
-                            };
-
-                            if let Err(err) = file.read_to_string(&mut content).await {
-                                error!("unable to read {layout} file because {err}");
-                                continue;
-                            }
-
-                            let filename = layout.split('/').next_back().unwrap();
-                            let filename_components = filename.split('.').collect::<Vec<_>>();
-                            let name = filename_components[..filename_components.len() - 1].join(".");
-                            match engine.add_template(name.clone(), content) {
-                                Ok(_) => {
-                                    trace!("layout {name} has been registered in template engine");
-                                }
-                                Err(err) => {
-                                    warn!("failed to add layout {name} ({layout}) in template engine because {err}");
-                                }
-                            }
-                        }
-
-                        engine.add_function("auth", {
-                            let auth = Arc::clone(&auth);
-                            move || (**auth).as_ref().map(|auth| upon::to_value(auth).unwrap())
-                        });
-
-                        register_functions(&mut engine, resources);
-
-                        let mut content = String::new();
-                        let mut file = match vfs.open_file(index).await {
-                            Ok(f) => f,
-                            Err(err) => {
-                                error!("failed to open {index} file because {err}");
-                                return Ok(make_not_found());
-                            }
-                        };
-                        if let Err(err) = file.read_to_string(&mut content).await {
-                            error!("failed to read {index} file because {err}");
-                            return Ok(make_internal_error());
-                        }
-
-                        let template = match engine.compile(&content) {
-                            Ok(t) => t,
-                            Err(err) => {
-                                error!("failed to compile {index:?} because {err:#}");
-                                return Ok(make_internal_error());
-                            }
-                        };
-
-                        let rendered = match template
-                            .render(
-                                &engine,
-                                upon::value! {
-                                    query: query,
-                                },
-                            )
-                            .to_string()
-                        {
-                            Ok(r) => r,
-                            Err(err) => {
-                                error!("failed to render {index:?} because {err:#}");
-                                return Ok(make_internal_error());
-                            }
-                        };
-
-                        let stream = stream::once(async { Ok::<Frame<Bytes>, std::io::Error>(Frame::data(Bytes::from(rendered))) });
-                        let stream: BoxStream = Box::pin(stream);
-                        let body = StreamBody::new(stream);
-                        Ok(Response::new(body))
-                    }
-                    ResourceRefType::Api(callback) => {
-                        let cookies = (**cookies).clone();
-                        let jwt = (**auth).clone();
-                        let params = result.params;
-                        let ctx = ApiContext {
-                            params,
-                            request: req,
-                            query,
-                            cookies,
-                            auth_context,
-                            resources,
-                            jwt,
-                        };
-                        let result = callback(ctx).await;
-                        Ok(result)
-                    }
-                },
+            let result = match result {
+                Ok(r) => r,
                 Err(_) => {
                     trace!("route not found, sending 404");
-                    Ok(make_not_found())
+                    return Ok(make_not_found());
+                }
+            };
+
+            match result.value {
+                ResourceRefType::Content(content) => {
+                    trace!("found content resource ref");
+                    let content = content.clone();
+                    let stream = stream::once(async { Ok::<Frame<Bytes>, std::io::Error>(Frame::data(content)) });
+                    let stream: BoxStream = Box::pin(stream);
+                    let body = StreamBody::new(stream);
+                    Ok(Response::new(body))
+                }
+                ResourceRefType::File(path) => {
+                    trace!("found file resource ref: {path:?}");
+                    let file = match vfs.open_file(path).await {
+                        Ok(f) => f,
+                        Err(err) => {
+                            error!("failed to open {path} file because {err}");
+                            return Ok(make_not_found());
+                        }
+                    };
+
+                    // convert async-std `Read` to tokio `AsyncRead`
+                    let file = tokio_util::compat::FuturesAsyncReadCompatExt::compat(file);
+
+                    let reader = ReaderStream::new(file);
+                    let stream: BoxStream = Box::pin(StreamBody::new(
+                        reader.filter_map(|buf| if let Ok(buf) = buf { Some(Ok(Frame::data(buf))) } else { None }),
+                    ));
+                    let body = StreamBody::new(stream);
+                    let mut response = Response::new(body);
+
+                    if let Some(mime) = mime_guess2::from_path(path).first() {
+                        response
+                            .headers_mut()
+                            .insert("Content-Type", HeaderValue::from_str(mime.as_ref()).expect("mime error"));
+                    }
+
+                    Ok(response)
+                }
+                ResourceRefType::Page { index, layouts } => {
+                    trace!("found page resource ref: {index:?}");
+
+                    for sys_path in &system_paths {
+                        if sys_path.path == path && sys_path.method == method && (sys_path.auth_required && auth.is_none()) {
+                            trace!("found system path, redirecting to login page");
+                            return Ok(make_see_other(format!("/admin/login?next={path}").as_str()));
+                        }
+                    }
+
+                    trace!("init template engine...");
+                    let mut engine = upon::Engine::new();
+
+                    for layout in layouts {
+                        let mut content = String::new();
+
+                        let mut file = match vfs.open_file(&layout).await {
+                            Ok(f) => f,
+                            Err(err) => {
+                                error!("failed to open {layout} file because {err}");
+                                continue;
+                            }
+                        };
+
+                        if let Err(err) = file.read_to_string(&mut content).await {
+                            error!("unable to read {layout} file because {err}");
+                            continue;
+                        }
+
+                        let filename = layout.split('/').next_back().unwrap();
+                        let filename_components = filename.split('.').collect::<Vec<_>>();
+                        let name = filename_components[..filename_components.len() - 1].join(".");
+                        match engine.add_template(name.clone(), content) {
+                            Ok(_) => {
+                                trace!("layout {name} has been registered in template engine");
+                            }
+                            Err(err) => {
+                                warn!("failed to add layout {name} ({layout}) in template engine because {err}");
+                            }
+                        }
+                    }
+
+                    engine.add_function("auth", {
+                        let auth = Arc::clone(&auth);
+                        move || (**auth).as_ref().map(|auth| upon::to_value(auth).unwrap())
+                    });
+
+                    register_functions(&mut engine, resources);
+
+                    let mut content = String::new();
+                    let mut file = match vfs.open_file(index).await {
+                        Ok(f) => f,
+                        Err(err) => {
+                            error!("failed to open {index} file because {err}");
+                            return Ok(make_not_found());
+                        }
+                    };
+                    if let Err(err) = file.read_to_string(&mut content).await {
+                        error!("failed to read {index} file because {err}");
+                        return Ok(make_internal_error());
+                    }
+
+                    let template = match engine.compile(&content) {
+                        Ok(t) => t,
+                        Err(err) => {
+                            error!("failed to compile {index:?} because {err:#}");
+                            return Ok(make_internal_error());
+                        }
+                    };
+
+                    let params = result
+                        .params
+                        .iter()
+                        .collect::<HashMap<_, _>>();
+
+                    let rendered = match template
+                        .render(
+                            &engine,
+                            upon::value! {
+                                query: query,
+                                params: params
+                            },
+                        )
+                        .to_string()
+                    {
+                        Ok(r) => r,
+                        Err(err) => {
+                            error!("failed to render {index:?} because {err:#}");
+                            return Ok(make_internal_error());
+                        }
+                    };
+
+                    let stream = stream::once(async { Ok::<Frame<Bytes>, std::io::Error>(Frame::data(Bytes::from(rendered))) });
+                    let stream: BoxStream = Box::pin(stream);
+                    let body = StreamBody::new(stream);
+                    Ok(Response::new(body))
+                }
+                ResourceRefType::Api(callback) => {
+                    let cookies = (**cookies).clone();
+                    let jwt = (**auth).clone();
+                    let params = result.params;
+                    let ctx = ApiContext {
+                        params,
+                        request: req,
+                        query,
+                        cookies,
+                        auth_context,
+                        resources,
+                        jwt,
+                    };
+                    let result = callback(ctx).await;
+                    Ok(result)
                 }
             }
         };
@@ -360,13 +368,16 @@ fn decode_jwt_from_cookies(cookies: &HashMap<String, String>, auth_context: &Aut
         if let Some(payload) = payload {
             if payload.claims.exp < jiff::Timestamp::now().as_second() as usize {
                 None
-            } else {
+            }
+            else {
                 Some(payload.claims)
             }
-        } else {
+        }
+        else {
             None
         }
-    } else {
+    }
+    else {
         None
     }
 }

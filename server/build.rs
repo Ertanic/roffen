@@ -95,4 +95,18 @@ fn build_ts(release: bool) {
     let main_css = main_project.join("out").join("index.css");
     std::fs::create_dir_all(&main_css_output).unwrap();
     std::fs::copy(main_css, main_css_output.join("index.css")).unwrap();
+
+    // view
+    let view_project = project.join("view");
+    println!("cargo:rerun-if-changed={}/*", view_project.display());
+    std::process::Command::new("bun")
+        .args(["run", build_name])
+        .current_dir(&view_project)
+        .output()
+        .unwrap();
+    
+    let view_output = project.join("content").join("public").join("view").join("js");
+    let view_script = view_project.join("out").join("index.js");
+    std::fs::create_dir_all(&view_output).unwrap();
+    std::fs::copy(view_script, view_output.join("index.js")).unwrap();
 }

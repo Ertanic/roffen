@@ -174,6 +174,11 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
         }
         upon::to_value(result).ok()
     });
+
+    engine.add_function("take", |vec: &[Value], count: usize| {
+        let max = vec.len().min(count);
+        Some(vec[..max].to_vec())
+    });
 }
 
 fn posts_to_upon_values(runtime: Handle, stream_result: VfsResult<impl Stream<Item = Post>>) -> Option<Vec<Value>> {

@@ -19,5 +19,16 @@ export const hooks: IComponentHooks = {
         return {
             content: ctx.el.children[0].innerText,
         }
+    },
+
+    mount: ctx => {
+        const quote = document.createElement('blockquote');
+        quote.innerText = ctx.data.content ?? ctx.el.innerText;
+        ctx.el.appendChild(quote);
+    },
+
+    setSize: ctx => {
+        ctx.setRow(Number(ctx.data.row));
+        ctx.setCol(Number(ctx.data.col));
     }
 }

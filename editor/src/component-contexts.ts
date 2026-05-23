@@ -8,7 +8,7 @@ import type {
     IComponentSetSizeContext
 } from "common/src/contexts.ts";
 
-type DataMap = Record<string, string>;
+export type DataMap = Record<string, string>;
 
 export class ComponentMountContext implements IComponentMountContext {
     public el: HTMLElement;

@@ -7,7 +7,7 @@ import {markedDirty, saveContent, unmarkDirty} from "./save-content.ts";
 
 declare const components: ComponentInfo[];
 
-type ComponentHooks = {
+export type ComponentHooks = {
     hooks: IComponentHooks
 };
 

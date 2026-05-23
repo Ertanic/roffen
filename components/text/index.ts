@@ -8,16 +8,31 @@ export const hooks: IComponentHooks = {
                 ctx.cancelAnimationFrame(ctx.refs)
                 ctx.requestAnimationFrame(() => {
                     ctx.keepBlockInView(() => {
-                        ctx.el.children[0].innerText = value;
+                        ctx.data.content = value;
+                        (ctx.el.children[0] as HTMLParagraphElement).innerText = value;
                         ctx.autoResizeRows();
                     })
                 });
             });
     },
 
+    mount: ctx => {
+        const textEl = document.createElement("p");
+        textEl.innerText = ctx.data.content ?? ctx.el.innerText;
+        ctx.el.appendChild(textEl);
+    },
+
+    setSize: ctx => {
+        if (!ctx.data.col) {
+            console.log("no column size found in component");
+            return;
+        }
+        ctx.setCol(Number(ctx.data.col));
+    },
+
     fetchData: ctx => {
         return {
-            content: ctx.el.children[0].innerText,
+            content: (ctx.el.children[0] as HTMLParagraphElement)?.innerText ?? ctx.data.content,
         }
     }
 }

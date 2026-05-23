@@ -1,0 +1,19 @@
+{% with get_components() as components %}
+<script>
+    const components = [
+        {%- for name, component in components %}
+        {
+            id: "{{ name }}",
+                path: "/components/js/{{ name }}",
+            html: "{{ component.meta.html }}",
+            title: "{{ component.meta.title }}",
+            data: {
+                {% for key, val in component.meta.defaults -%}
+                "{{ key }}": "{{ val }}",
+                {%- endfor %}
+            },
+        },
+        {%- endfor %}
+    ];
+</script>
+{% endwith %}

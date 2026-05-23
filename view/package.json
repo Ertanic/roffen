@@ -1,0 +1,19 @@
+{
+  "name": "view",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "common": "file:../common",
+    "editor": "file:../editor"
+  },
+  "scripts": {
+    "build": "bun build --outdir out ./index.ts",
+    "build-prod": "bun build --outdir out ./index.ts --production"
+  }
+}
