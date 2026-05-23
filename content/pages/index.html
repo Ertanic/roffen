@@ -317,6 +317,40 @@ ComponentMeta(
                         <p>To view the results of the script, see the <a href="/posts">Posts</a> page.</p>
                     </li>
                 </ol>
+
+                <h2>Why</h2>
+                <p>Why such difficulties? At first, I planned to make components using an embedded language, but I
+                    quickly abandoned this idea
+                    because it would have complicated interaction with the DOM tree. Therefore, I had to use native
+                    JS/TS scripts to give you complete freedom of action.</p>
+            </article>
+
+            <article>
+                <h1>Build</h1>
+                <p>To build the project, you will need several things:</p>
+                <ol>
+                    <li><a href="https://rust-lang.org/tools/install/">rust toolchain</a></li>
+                    <li><a href="https://bun.sh/">bun</a></li>
+                </ol>
+
+                <p>If everything is installed, you can use the following command, which will compile both the server and
+                    all the typescript code in release mode, optimizing the entire code.</p>
+                <pre><code class="language-powershell">
+cargo build -r
+                </code></pre>
+
+                <p>Upon successful build, the executable file will appear in the
+                    <code>target/release/server(.exe)</code> path.</p>
+                <p>That's all, you won't need anything else in this directory, all resources from the
+                    <code>content/</code> folder
+                    are included in the output executable file by default.</p>
+
+                <p>In debug mode, the project can be started with the following command. In this case, no optimizations
+                    or content inclusion will be applied, so you can safely change the contents of this folder in live
+                    mode.</p>
+                <pre><code class="language-powershell">
+cargo run
+                </code></pre>
             </article>
         </section>
     </div>
