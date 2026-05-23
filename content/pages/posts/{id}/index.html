@@ -1,1 +1,63 @@
-{{ params.id }}
+<!doctype html>
+<html lang="en">
+<head>
+    {% include "head" %}
+    <style>
+        .content {
+            .muted {
+                color: #aaa;
+                font-size: .8em;
+                cursor: default;
+            }
+
+            & > header {
+                margin-bottom: 1em;
+
+                & > h1 {
+                    padding-bottom: 0;
+                }
+            }
+        }
+    </style>
+</head>
+<body>
+{% include "header" %}
+
+<main class="flex three">
+    <section></section>
+    <section class="content">
+        {% with get_post_by_id(params.id) as post %}
+        {% if post %}
+            {% if not post.draft %}
+
+            <header>
+                <h1>{{ post.title }}</h1>
+                <span class="muted">{{ post.created_at | date: "%Y-%m-%d" }}</span>
+            </header>
+
+            <main class="grid-content">
+                {% for comp in post.content %}
+
+                <div data-type="{{ comp.name }}"
+                     {% for key, val in comp.data %}
+                     data-{{ key }}="{{ val }}"
+                     {% endfor %}
+                ></div>
+
+                {% endfor %}
+            </main>
+
+            {% else %}
+                {% include "not_found" %}
+            {% endif %}
+
+        {% else %}
+            {% include "not_found" %}
+        {% endif %}
+        {% endwith %}
+    </section>
+</main>
+
+</body>
+{% include "footer" %}
+</html>

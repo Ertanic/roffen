@@ -1,0 +1,24 @@
+PostBody(
+    draft: false,
+    author: "admin",
+    created_at: 1779439151,
+    title: "Super-puper-post",
+    content: [
+        PostComponent(
+            name: "quote",
+            data: {
+                "content": "Lupus pilum mutat, non\u{a0}mentem.",
+                "row": "1",
+                "col": "12",
+            },
+        ),
+        PostComponent(
+            name: "image",
+            data: {
+                "source": "https://127.0.0.1:8084/examples/wolf.png",
+                "row": "4",
+                "col": "6",
+            },
+        ),
+    ],
+)
