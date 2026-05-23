@@ -2,10 +2,14 @@ import 'highlight.js/styles/github.css';
 import hljs from 'highlight.js';
 import rust from 'highlight.js/lib/languages/rust';
 import typescript from 'highlight.js/lib/languages/typescript';
+import markdown from 'highlight.js/lib/languages/markdown';
+import handlebars from 'highlight.js/lib/languages/handlebars';
 import mermaid from 'mermaid';
 
 hljs.registerLanguage('rust', rust);
 hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('html', markdown);
+hljs.registerLanguage('handlebars', handlebars);
 
 hljs.highlightAll();
 

@@ -18,7 +18,7 @@
     <div class="flex three two">
         <section id="contents-table" class="center flow">
             <h1>Contents</h1>
-            <ul id="contents-table-list"></ul>
+            <ol id="contents-table-list"></ol>
         </section>
         <section id="content">
             <article>
@@ -86,6 +86,13 @@
                     <li><code>auth: Option&lt;JwtPayload&gt;</code> - authentication status.</li>
                     <li><code>query: Map&lt;string, string&gt;</code> - query parameters.</li>
                 </ul>
+
+                <blockquote>
+                    If you don't have any functions or values in the template engine, you can always manually add them.
+                    See this <a
+                        href="https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs">file</a>
+                    and the project <a href="#Build">build</a> method.
+                </blockquote>
 
                 <p>Let's now look at the fields of structures that are returned from functions and constants.</p>
                 <pre><code class="language-rust">
@@ -155,6 +162,8 @@ struct JwtPayload {
                         E -->|yes| I[fetch data]
                         I -->|data from props| E
                 </pre>
+
+                <h2>Implementation</h2>
                 <p>Let's try to implement the image component. To do this, create a project with the following
                     content:</p>
                 <ul>
@@ -247,6 +256,67 @@ ComponentMeta(
 
                 <p>Now we can use this component in the editor.</p>
                 <img src="/examples/img_component.png" alt="img component">
+
+                <h2>Rendering</h2>
+                <p>There are several things you need to do to render components on a page:</p>
+                <ol>
+                    <li>
+                        <p>Add the required styles to the page.</p>
+                        <pre><code class="language-html">
+&lt;link rel="stylesheet" href="/view/css/styles.css"&gt;
+                        </code></pre>
+                    </li>
+                    <li>
+                        <p>Declare components before all other scripts by generating a js array with the desired
+                            properties.</p>
+                        <pre><code class="language-handlebars">
+{&percnt; with get_components() as components &percnt;}
+&lt;script&gt;
+    const components = [
+        {&percnt;- for name, component in components &percnt;}
+        {
+            id: "{&#123; name &#125;}",
+            path: "/components/js/{&#123; name &#125;}",
+            html: "{&#123; component.meta.html &#125;}",
+            title: "{&#123; component.meta.title &#125;}",
+            data: {
+            {&percnt; for key, val in component.meta.defaults -&percnt;}
+            "{&#123; key &#125;}": "{&#123; val &#125;}",
+            {&percnt;- endfor &percnt;}
+        },
+        {&percnt;- endfor &percnt;}
+    ];
+&lt;/script&gt;
+{&percnt; endwith &percnt;}
+                        </code></pre>
+                    </li>
+                    <li>
+                        <p>Next, you need to add the following script to your page.</p>
+                        <pre><code class="language-html">
+&lt;script src="/view/js/index.js"&gt;&lt;/script&gt;
+                        </code></pre>
+                    </li>
+                    <li>
+                        <p>Finally, you can use components by generating their data containers inside a container with
+                            the <code>.grid-content</code> class.</p>
+                        <pre><code class="language-handlebars">
+&lt;div class="grid-content"&gt;
+    {&percnt; for comp in post.content &percnt;}
+
+    &lt;div data-type="{&#123; comp.name &#125;}"
+         {&percnt; for key, val in comp.data &percnt;}
+         data-{&#123; key &#125;}="{&#123; val &#125;}"
+         {&percnt; endfor &percnt;}
+    &gt;&lt;/div&gt;
+
+    {&percnt; endfor &percnt;}
+&lt;/div&gt;
+                        </code></pre>
+                    </li>
+                    <li>
+                        <p>To view the results of the script, see the <a href="/posts">Posts</a> page.</p>
+                    </li>
+                </ol>
             </article>
         </section>
     </div>
