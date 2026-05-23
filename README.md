@@ -62,8 +62,7 @@ In addition to functions, the following values are passed to templates:
 * `query: Map<string, string>` - query parameters.
 
 > If you don't have any functions or values in the template engine, you can always manually add them. See
->
-this [file](https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs)
+> this [file](https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs)
 > and the project [build](#build) method.
 
 Let's now look at the fields of structures that are returned from functions and constants.
@@ -72,13 +71,13 @@ Let's now look at the fields of structures that are returned from functions and 
 struct Post {
     id: String,
     content: {
-    draft: bool,
-    author: String,
-    created_at: u64,
-    updated_at: Option<u64>,
-    title: String,
-    content: Vec<PostComponent>,
-},
+       draft: bool,
+       author: String,
+       created_at: u64,
+       updated_at: Option<u64>,
+       title: String,
+       content: Vec<PostComponent>,
+   },
 }
 
 struct PostComponent {
