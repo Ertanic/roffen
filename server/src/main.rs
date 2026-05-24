@@ -18,7 +18,7 @@ use crate::{
     },
     consts::CONTENT_FOLDER,
     logs::setup_logger,
-    resources::{ResourceManager, get_root},
+    resources::{ResourceManager, api, get_root},
     routing::{Bulldozer, BulldozerContext, MethodRouter, SystemPath, delete, get, patch, post},
     vfs::{PageLayout, VfsPath, init_vfs},
     watcher::init_watcher,
@@ -86,16 +86,16 @@ async fn main() {
 
     let mut router = MethodRouter::default();
 
-    router.add(post("/admin/login"), ResourceRefType::Api(Box::new(login)));
-    router.add(get("/admin/logout"), ResourceRefType::Api(Box::new(logout)));
+    router.add(post("/admin/login"), api(login));
+    router.add(get("/admin/logout"), api(logout));
     router.add(get("/health"), ResourceRefType::Content(Bytes::from("ok")));
-    router.add(post("/api/posts"), ResourceRefType::Api(Box::new(create_post)));
-    router.add(delete("/api/posts"), ResourceRefType::Api(Box::new(delete_post)));
-    router.add(get("/api/posts"), ResourceRefType::Api(Box::new(get_posts)));
-    router.add(patch("/api/posts"), ResourceRefType::Api(Box::new(update_post)));
-    router.add(get("/components/js/{comp}"), ResourceRefType::Api(Box::new(get_component_js)));
-    router.add(get("/api/resources"), ResourceRefType::Api(Box::new(get_resources_in_folder)));
-    router.add(get("/admin/posts/new"), ResourceRefType::Api(Box::new(new_post)));
+    router.add(post("/api/posts"), api(create_post));
+    router.add(delete("/api/posts"), api(delete_post));
+    router.add(get("/api/posts"), api(get_posts));
+    router.add(patch("/api/posts"), api(update_post));
+    router.add(get("/components/js/{comp}"), api(get_component_js));
+    router.add(get("/api/resources"), api(get_resources_in_folder));
+    router.add(get("/admin/posts/new"), api(new_post));
 
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;

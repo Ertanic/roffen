@@ -1,6 +1,7 @@
 use crate::{
-    PageLayout, ResourceRefType,
+    PageLayout, ResourceRefType, Response,
     api::{
+        ApiContext,
         auth::AuthContext,
         components::{Component, ComponentMeta},
         posts::{Post, PostBody},
@@ -11,7 +12,9 @@ use crate::{
     vfs::{PageDir, VfsPath, VirtualFS},
 };
 use futures_util::{
-    AsyncReadExt, AsyncWriteExt, Stream, stream,
+    AsyncReadExt, AsyncWriteExt, Stream,
+    future::BoxFuture,
+    stream,
     stream::{BoxStream, StreamExt},
 };
 use log::{debug, error, trace, warn};
@@ -19,6 +22,23 @@ use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
 use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+
+pub trait BoxedApiCallback {
+    fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static>;
+}
+
+impl<F> BoxedApiCallback for F
+where
+    F: Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static,
+{
+    fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static> {
+        Box::new(self)
+    }
+}
+
+pub fn api(callback: impl BoxedApiCallback) -> ResourceRefType {
+    ResourceRefType::Api(callback.boxed())
+}
 
 #[derive(Serialize)]
 pub struct PageInfo {
