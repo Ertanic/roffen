@@ -324,7 +324,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                 ResourceRefType::Api(callback) => {
                     let cookies = (**cookies).clone();
                     let jwt = (**auth).clone();
-                    let params = result.params;
+                    let params = result.params.iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect::<HashMap<_, _>>();
                     let ctx = ApiContext {
                         params,
                         request: req,
