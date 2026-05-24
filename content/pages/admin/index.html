@@ -8,10 +8,10 @@
     {% if auth() %}
         {% include "navbar" %}
         <main class="content-center">
-            <h1>admin panel</h1>
+            <h1>{{ lang("admin-panel-title") }}</h1>
         </main>
     {% else %}
-        <p>you are not authorized</p>
+        <p>{{ lang("admin-panel-not-authorized") }}</p>
     {% endif %}
 </body>
 </html>

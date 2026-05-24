@@ -1,5 +1,6 @@
 mod api;
 mod consts;
+mod lang;
 mod logs;
 mod resources;
 mod routing;
@@ -101,6 +102,8 @@ async fn main() {
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;
 
+    let lang_manager = resources.read().await.load_lang().await.expect("unable to load languages");
+
     let router = Arc::new(RwLock::new(router));
 
     let system_paths = vec![
@@ -132,6 +135,7 @@ async fn main() {
         auth: auth_context,
         vfs,
         system_paths,
+        lang_manager,
     };
     let bulldozer = Arc::new(Bulldozer::new(ctx));
 

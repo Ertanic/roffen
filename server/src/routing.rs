@@ -2,6 +2,7 @@ use crate::{
     AuthContext, BoxStream, ResourceRefType, Response,
     api::{ApiContext, auth::JwtPayload},
     consts::AUTH_COOKIE_NAME,
+    lang::LangManager,
     resources::ResourceManager,
     templates::functions::register_functions,
     utils::{make_internal_error, make_not_found, make_see_other},
@@ -118,6 +119,7 @@ pub struct BulldozerContext {
     pub vfs: VirtualFS,
     pub resources: Arc<RwLock<ResourceManager>>,
     pub system_paths: Vec<SystemPath>,
+    pub lang_manager: LangManager,
 }
 
 pub struct Bulldozer {
@@ -126,11 +128,13 @@ pub struct Bulldozer {
     vfs: VirtualFS,
     resources: Arc<RwLock<ResourceManager>>,
     system_paths: Vec<SystemPath>,
+    lang_manager: LangManager,
 }
 
 impl Bulldozer {
     pub fn new(ctx: BulldozerContext) -> Self {
         Self {
+            lang_manager: ctx.lang_manager,
             router: ctx.router,
             auth: ctx.auth,
             vfs: ctx.vfs,
@@ -152,6 +156,7 @@ impl Service<Request<Incoming>> for Bulldozer {
             req.uri().path_and_query().map(|a| a.as_str()).unwrap_or_else(|| req.uri().path())
         );
 
+        let lang_manager = self.lang_manager.clone();
         let resources = Arc::clone(&self.resources);
         let vfs = Arc::clone(&self.vfs);
         let router = Arc::clone(&self.router);
@@ -274,7 +279,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         move || (**auth).as_ref().map(|auth| upon::to_value(auth).unwrap())
                     });
 
-                    register_functions(&mut engine, resources);
+                    register_functions(&mut engine, resources, lang_manager);
 
                     let mut content = String::new();
                     let mut file = match vfs.open_file(index).await {

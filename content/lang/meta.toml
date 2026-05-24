@@ -1,0 +1,11 @@
+[server]
+current = "en-US"
+default = "en-US"
+
+[[lang]]
+code = "en-US"
+name = "english"
+
+[[lang]]
+code = "ru-RU"
+name = "русский"

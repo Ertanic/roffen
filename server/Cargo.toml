@@ -32,6 +32,9 @@ ron = "0.12.0"
 small_uid = "0.2.4"
 serde_json = "1.0.148"
 tokio-rustls = "0.26"
+unic-langid = "0.9"
+fluent = "0.17"
+dashmap = "7.0.0-rc2"
 macros = { path = "../macros" }
 
 [build-dependencies]

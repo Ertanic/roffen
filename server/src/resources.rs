@@ -7,10 +7,16 @@ use crate::{
         posts::{Post, PostBody},
         resources::{ResourceInfo, ResourceType},
     },
-    consts::{AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER, SEC_FILENAME},
+    consts::{
+        AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, POSTS_FOLDER,
+        PUBLIC_FOLDER, SEC_FILENAME,
+    },
+    lang::{LangManager, LangMeta},
     routing::{MethodRouter, get},
     vfs::{PageDir, VfsPath, VirtualFS},
 };
+use dashmap::DashMap;
+use fluent::{FluentResource, concurrent::FluentBundle};
 use futures_util::{
     AsyncReadExt, AsyncWriteExt, Stream,
     future::BoxFuture,
@@ -21,6 +27,8 @@ use log::{debug, error, trace, warn};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
+use tokio::sync::{Mutex, RwLock};
+use unic_langid::LanguageIdentifier;
 use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
 
 pub trait BoxedApiCallback {
@@ -460,10 +468,10 @@ impl ResourceManager {
                             let mut tags = Vec::with_capacity(1);
 
                             if normalized.starts_with(&VfsPath::new("admin")) {
-                                tags.push("system".to_owned());
+                                tags.push("admin-panel-pages-tag-system".to_owned());
                             }
                             else {
-                                tags.push("user".to_owned())
+                                tags.push("admin-panel-pages-tag-user".to_owned())
                             }
 
                             let link = normalized.as_string();
@@ -482,6 +490,113 @@ impl ResourceManager {
         .boxed();
 
         Ok(stream)
+    }
+
+    async fn ensure_lang_folder(&self) -> VfsResult<VfsPath> {
+        let folder = VfsPath::new(LANG_FOLDER);
+
+        if let Ok(exists) = self.vfs.exists(&folder).await
+            && !exists
+        {
+            self.vfs.create_dir(LANG_FOLDER).await?;
+        }
+
+        Ok(folder)
+    }
+
+    pub async fn load_lang(&self) -> VfsResult<LangManager> {
+        let folder = self.ensure_lang_folder().await?;
+        let meta = folder.join(LANG_META_FILE);
+        let mut meta_content = String::new();
+
+        self.vfs.open_file(&meta).await?.read_to_string(&mut meta_content).await?;
+        let meta = toml::from_str::<'_, LangMeta>(&meta_content).expect("invalid lang file");
+
+        let map = self
+            .vfs
+            .read_dir(&folder)
+            .await?
+            .fold(DashMap::new(), |map, entry| async {
+                if entry == LANG_META_FILE {
+                    return map;
+                }
+                
+                let lang_id = match entry.parse::<LanguageIdentifier>() {
+                    Ok(lang_id) => lang_id,
+                    Err(err) => {
+                        error!("unable to parse language identifier {entry} because {err}");
+                        return map;
+                    }
+                };
+
+                let stack = Arc::new(Mutex::new(vec![folder.join(entry.clone())]));
+                let bundle = Arc::new(RwLock::new(FluentBundle::new_concurrent(vec![lang_id])));
+
+                while let Some(path) = stack.lock().await.pop() {
+                    match self.vfs.read_dir(&path).await {
+                        Ok(reader) => reader.for_each(|e| {
+                            let bundle = bundle.clone();
+                            let stack = stack.clone();
+                            let path = path.clone();
+
+                            async move {
+                                let entry = path.join(e);
+
+                                if let Ok(meta) = self.vfs.metadata(&entry).await
+                                    && matches!(meta.file_type, VfsFileType::Directory)
+                                {
+                                    stack.lock().await.push(entry);
+                                    return;
+                                }
+
+                                let mut content = String::new();
+                                let mut file = match self.vfs.open_file(&entry).await {
+                                    Ok(file) => file,
+                                    Err(err) => {
+                                        error!("unable to open file {entry} because {err}");
+                                        return;
+                                    }
+                                };
+
+                                match file.read_to_string(&mut content).await {
+                                    Ok(_) => {}
+                                    Err(err) => {
+                                        error!("unable to read file {entry} because {err}");
+                                        return;
+                                    }
+                                }
+
+                                let resource = match FluentResource::try_new(content) {
+                                    Ok(resource) => resource,
+                                    Err(err) => {
+                                        error!("unable to parse resource {entry} because {:?}", err.1);
+                                        return;
+                                    }
+                                };
+
+                                match bundle.write().await.add_resource(resource) {
+                                    Ok(_) => {}
+                                    Err(err) => {
+                                        error!("unable to add resource {entry} because {err:?}");
+                                    }
+                                };
+                            }
+                        }),
+                        Err(err) => {
+                            error!("unable to read directory {path} because {err}");
+                            return map;
+                        }
+                    }
+                    .await;
+                }
+
+                map.insert(entry, bundle);
+
+                map
+            })
+            .await;
+
+        Ok(LangManager::new(meta.server.current, meta.server.default, map, meta.lang))
     }
 
     pub async fn get_resources_in_folder(&self, folder: &str) -> VfsResult<BoxStream<'static, ResourceInfo>> {

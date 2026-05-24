@@ -9,8 +9,8 @@
 <main class="content-center full">
     <div class="page-header">
         <div>
-            <h2 style="margin:0">Pages</h2>
-            <p class="muted" style="margin:0.25rem 0 0 0">List of all blog public pages.</p>
+            <h2 style="margin:0">{{ lang("admin-panel-pages-title") }}</h2>
+            <p class="muted" style="margin:0.25rem 0 0 0">{{ lang("admin-panel-pages-subtitle") }}</p>
         </div>
     </div>
 
@@ -18,21 +18,21 @@
     <table class="posts-table">
         <thead>
         <tr>
-            <th>Tags</th>
-            <th>Link</th>
-            <th>Path</th>
+            <th>{{ lang("admin-panel-pages-table-tags") }}</th>
+            <th>{{ lang("admin-panel-pages-table-link") }}</th>
+            <th>{{ lang("admin-panel-pages-table-path") }}</th>
         </tr>
         </thead>
         <tbody>
         <tr>
             {% if not len(pages) %}
-            <td colspan="3" class="muted" style="padding:2rem; text-align:center">No pages, create one.</td>
+            <td colspan="3" class="muted" style="padding:2rem; text-align:center">{{ lang("admin-panel-pages-no-one") }}</td>
             {% else %}
             {% for page in pages %}
             <tr>
                 <td>
                     {% for tag in page.tags %}
-                    <span class="badge {% if tag | eq: "system" %}draft{% else %}published{% endif %}">{{ tag }}</span>
+                    <span class="badge {% if tag | eq: "admin-panel-pages-tag-system" %}draft{% else %}published{% endif %}">{{ lang(tag) }}</span>
                     {% endfor %}
                 </td>
                 <td><a href="{{ page.link }}">{{ page.link }}</a></td>
