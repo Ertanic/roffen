@@ -12,7 +12,7 @@ use crate::{
     api::{
         ApiContext,
         auth::{AuthContext, login, logout},
-        components::get_component_js,
+        components::{get_component_js, get_components},
         posts::{create_post, delete_post, get_posts, new_post, update_post},
         resources::get_resources_in_folder,
     },
@@ -94,6 +94,7 @@ async fn main() {
     router.add(get("/api/posts"), api(get_posts));
     router.add(patch("/api/posts"), api(update_post));
     router.add(get("/components/js/{comp}"), api(get_component_js));
+    router.add(get("/components"), api(get_components));
     router.add(get("/api/resources"), api(get_resources_in_folder));
     router.add(get("/admin/posts/new"), api(new_post));
 

@@ -1,7 +1,7 @@
 use crate::{
     Response,
     api::ApiContext,
-    utils::{make_bad_request, make_internal_error, make_js_response, make_not_found},
+    utils::{make_bad_request, make_internal_error, make_js_response, make_json_response, make_not_found},
     vfs::VfsPath,
 };
 use futures_util::future::BoxFuture;
@@ -73,4 +73,20 @@ pub fn get_component_js(ctx: ApiContext) -> BoxFuture<'static, Response> {
     else {
         make_not_found()
     }
+}
+
+#[callback]
+pub fn get_components(ctx: ApiContext) -> BoxFuture<'static, Response> {
+    let resources = ctx.resources.read().await;
+    let comps = match resources.load_components().await {
+        Ok(comps) => comps.map(|c| c.meta).collect::<Vec<_>>().await,
+        Err(err) => {
+            error!("unable to load components list because {err}");
+            return make_internal_error();
+        }
+    };
+
+    let content = serde_json::to_string(&comps).unwrap();
+
+    make_json_response(content.as_str())
 }
