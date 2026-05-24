@@ -18,7 +18,7 @@ use hyper::{
 };
 use jsonwebtoken::{DecodingKey, Validation};
 use log::{error, trace, warn};
-use matchit::{Match, Router};
+use matchit::{InsertError, Match, Router};
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -67,14 +67,19 @@ pub struct MethodRouter {
 }
 
 impl MethodRouter {
-    pub fn add(&mut self, route: MethodRoute, resource: ResourceRefType) -> Result<(), matchit::InsertError> {
+    const INSERT_ERROR: &'static str = "failed to insert route";
+    pub fn add(&mut self, route: MethodRoute, resource: ResourceRefType) {
+        self.try_add(route, resource).expect(Self::INSERT_ERROR);
+    }
+
+    pub fn try_add(&mut self, route: MethodRoute, resource: ResourceRefType) -> Result<(), InsertError> {
         match route.method {
             Method::GET => self.get.insert(route.path, resource),
             Method::POST => self.post.insert(route.path, resource),
             Method::DELETE => self.delete.insert(route.path, resource),
             Method::PATCH => self.patch.insert(route.path, resource),
-            _ => Err(matchit::InsertError::Conflict {
-                with: format!("no {} method router", route.method),
+            _ => Err(InsertError::Conflict {
+                with: format!("{} method not supported", route.method),
             }),
         }
     }
@@ -292,10 +297,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         }
                     };
 
-                    let params = result
-                        .params
-                        .iter()
-                        .collect::<HashMap<_, _>>();
+                    let params = result.params.iter().collect::<HashMap<_, _>>();
 
                     let rendered = match template
                         .render(

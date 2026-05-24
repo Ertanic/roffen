@@ -86,36 +86,16 @@ async fn main() {
 
     let mut router = MethodRouter::default();
 
-    router
-        .add(post("/admin/login"), ResourceRefType::Api(Box::new(login)))
-        .expect("failed to register /login route");
-    router
-        .add(get("/admin/logout"), ResourceRefType::Api(Box::new(logout)))
-        .expect("failed to register /logout route");
-    router
-        .add(get("/health"), ResourceRefType::Content(Bytes::from("ok")))
-        .expect("failed to register /health route");
-    router
-        .add(post("/api/posts"), ResourceRefType::Api(Box::new(create_post)))
-        .expect("failed to register post /api/posts route");
-    router
-        .add(delete("/api/posts"), ResourceRefType::Api(Box::new(delete_post)))
-        .expect("failed to register delete /api/posts route");
-    router
-        .add(get("/api/posts"), ResourceRefType::Api(Box::new(get_posts)))
-        .expect("failed to register get /api/posts route");
-    router
-        .add(patch("/api/posts"), ResourceRefType::Api(Box::new(update_post)))
-        .expect("failed to register patch /api/posts route");
-    router
-        .add(get("/components/js/{comp}"), ResourceRefType::Api(Box::new(get_component_js)))
-        .expect("failed to register get /api/components route");
-    router
-        .add(get("/api/resources"), ResourceRefType::Api(Box::new(get_resources_in_folder)))
-        .expect("failed to register get /api/resources route");
-    router
-        .add(get("/admin/posts/new"), ResourceRefType::Api(Box::new(new_post)))
-        .expect("failed to register get /admin/posts/new route");
+    router.add(post("/admin/login"), ResourceRefType::Api(Box::new(login)));
+    router.add(get("/admin/logout"), ResourceRefType::Api(Box::new(logout)));
+    router.add(get("/health"), ResourceRefType::Content(Bytes::from("ok")));
+    router.add(post("/api/posts"), ResourceRefType::Api(Box::new(create_post)));
+    router.add(delete("/api/posts"), ResourceRefType::Api(Box::new(delete_post)));
+    router.add(get("/api/posts"), ResourceRefType::Api(Box::new(get_posts)));
+    router.add(patch("/api/posts"), ResourceRefType::Api(Box::new(update_post)));
+    router.add(get("/components/js/{comp}"), ResourceRefType::Api(Box::new(get_component_js)));
+    router.add(get("/api/resources"), ResourceRefType::Api(Box::new(get_resources_in_folder)));
+    router.add(get("/admin/posts/new"), ResourceRefType::Api(Box::new(new_post)));
 
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;

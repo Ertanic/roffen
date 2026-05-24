@@ -235,7 +235,7 @@ async fn watch_content(mut watcher: FilesWatcher, router: Arc<RwLock<MethodRoute
 
                 match kind {
                     ContentEventKind::NewPublic => {
-                        if let Err(err) = router.add(get(&web_path), ResourceRefType::File(path)) {
+                        if let Err(err) = router.try_add(get(&web_path), ResourceRefType::File(path)) {
                             error!("unable to update router with route {web_path} because {err}");
                         }
                     }

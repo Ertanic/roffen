@@ -155,7 +155,7 @@ impl ResourceManager {
 
         let normalized = normalize_route(&page.path.strip_prefix(VfsPath::new(PAGES_FOLDER)).unwrap());
 
-        match router.add(get(&normalized), resource) {
+        match router.try_add(get(&normalized), resource) {
             Ok(_) => {
                 debug!("page route {normalized} has been registered");
             }
@@ -208,7 +208,7 @@ impl ResourceManager {
                 else {
                     let normalized = normalize_route(&entry.strip_prefix(VfsPath::new(PUBLIC_FOLDER)).unwrap());
 
-                    match router.add(get(&normalized), ResourceRefType::File(VfsPath::new(entry))) {
+                    match router.try_add(get(&normalized), ResourceRefType::File(VfsPath::new(entry))) {
                         Ok(_) => {
                             debug!("route \"{normalized}\" has been registered");
                         }
