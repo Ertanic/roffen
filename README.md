@@ -236,37 +236,14 @@ There are several things you need to do to render components on a page:
 <link rel="stylesheet" href="/view/css/styles.css">
 ```
 
-2. Declare components before all other scripts by generating a js array with the desired properties.
-
-```handlebars
-{% with get_components() as components %}
-<script>
-    const components = [
-        {%- for name, component in components %}
-        {
-            id: "{{ name }}",
-            path: "/components/js/{{ name }}",
-            html: "{{ component.meta.html }}",
-            title: "{{ component.meta.title }}",
-            data: {
-            {% for key, val in component.meta.defaults -%}
-            "{{ key }}": "{{ val }}",
-            {%- endfor %}
-        },
-        {%- endfor %}
-    ];
-</script>
-{% endwith %}
-```
-
-3. Next, you need to add the following script to your page.
+2. Next, you need to add the following script to your page.
 
 ```html
 
 <script src="/view/js/index.js"></script>
 ```
 
-4. Finally, you can use components by generating their data containers inside a container with the `.grid-content`
+3. Finally, you can use components by generating their data containers inside a container with the `.grid-content`
    class.
 
 ```handlebars
@@ -283,7 +260,7 @@ There are several things you need to do to render components on a page:
 </div>
 ```
 
-5. To view the results of the script, see the Posts page.
+4. To view the results of the script, see the Posts page.
 
 ## Why
 

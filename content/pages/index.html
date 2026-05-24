@@ -267,30 +267,6 @@ ComponentMeta(
                         </code></pre>
                     </li>
                     <li>
-                        <p>Declare components before all other scripts by generating a js array with the desired
-                            properties.</p>
-                        <pre><code class="language-handlebars">
-{&percnt; with get_components() as components &percnt;}
-&lt;script&gt;
-    const components = [
-        {&percnt;- for name, component in components &percnt;}
-        {
-            id: "{&#123; name &#125;}",
-            path: "/components/js/{&#123; name &#125;}",
-            html: "{&#123; component.meta.html &#125;}",
-            title: "{&#123; component.meta.title &#125;}",
-            data: {
-            {&percnt; for key, val in component.meta.defaults -&percnt;}
-            "{&#123; key &#125;}": "{&#123; val &#125;}",
-            {&percnt;- endfor &percnt;}
-        },
-        {&percnt;- endfor &percnt;}
-    ];
-&lt;/script&gt;
-{&percnt; endwith &percnt;}
-                        </code></pre>
-                    </li>
-                    <li>
                         <p>Next, you need to add the following script to your page.</p>
                         <pre><code class="language-html">
 &lt;script src="/view/js/index.js"&gt;&lt;/script&gt;
