@@ -102,7 +102,7 @@ async fn main() {
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;
 
-    let lang_manager = resources.read().await.load_lang().await.expect("unable to load languages");
+    let lang_manager = resources.read().await.load_langs().await.expect("unable to load languages");
 
     let router = Arc::new(RwLock::new(router));
 
@@ -135,11 +135,11 @@ async fn main() {
         auth: auth_context,
         vfs,
         system_paths,
-        lang_manager,
+        lang_manager: lang_manager.clone(),
     };
     let bulldozer = Arc::new(Bulldozer::new(ctx));
 
-    init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources));
+    init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources), lang_manager);
 
     let sec = resources.read().await.load_security().await;
     if let Some(sec) = sec {

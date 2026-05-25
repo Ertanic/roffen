@@ -191,6 +191,12 @@ impl AsRef<Path> for VfsPath {
     }
 }
 
+impl Default for VfsPath {
+    fn default() -> Self {
+        Self::new("")
+    }
+}
+
 #[cfg(not(debug_assertions))]
 #[derive(Embed)]
 #[folder = "../content"]

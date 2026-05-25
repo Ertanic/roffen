@@ -11,7 +11,7 @@ use crate::{
         AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, POSTS_FOLDER,
         PUBLIC_FOLDER, SEC_FILENAME,
     },
-    lang::{LangManager, LangMeta},
+    lang::{LangBundle, LangManager, LangMeta},
     routing::{MethodRouter, get},
     vfs::{PageDir, VfsPath, VirtualFS},
 };
@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use unic_langid::LanguageIdentifier;
-use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+use vfs::{VfsError, VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
 
 pub trait BoxedApiCallback {
     fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static>;
@@ -504,13 +504,89 @@ impl ResourceManager {
         Ok(folder)
     }
 
-    pub async fn load_lang(&self) -> VfsResult<LangManager> {
-        let folder = self.ensure_lang_folder().await?;
-        let meta = folder.join(LANG_META_FILE);
+    pub async fn load_lang_meta(&self, lang_folder: &VfsPath) -> VfsResult<LangMeta> {
+        let meta = lang_folder.join(LANG_META_FILE);
         let mut meta_content = String::new();
-
         self.vfs.open_file(&meta).await?.read_to_string(&mut meta_content).await?;
-        let meta = toml::from_str::<'_, LangMeta>(&meta_content).expect("invalid lang file");
+        toml::from_str(&meta_content).map_err(|err| VfsErrorKind::Other(err.to_string()).into())
+    }
+
+    pub async fn load_lang(&self, lang_folder: &VfsPath) -> VfsResult<LangBundle> {
+        let lang_id = match lang_folder.filename().parse::<LanguageIdentifier>() {
+            Ok(lang_id) => lang_id,
+            Err(err) => {
+                error!("unable to parse language identifier {} because {err}", lang_folder.filename());
+                return Err(VfsErrorKind::Other(err.to_string()).into());
+            }
+        };
+
+        let stack = Arc::new(Mutex::new(vec![lang_folder.clone()]));
+        let bundle = Arc::new(RwLock::new(FluentBundle::new_concurrent(vec![lang_id])));
+
+        while let Some(path) = stack.lock().await.pop() {
+            match self.vfs.read_dir(&path).await {
+                Ok(reader) => reader.for_each(|e| {
+                    let bundle = bundle.clone();
+                    let stack = stack.clone();
+                    let path = path.clone();
+
+                    async move {
+                        let entry = path.join(e);
+
+                        if let Ok(meta) = self.vfs.metadata(&entry).await
+                            && matches!(meta.file_type, VfsFileType::Directory)
+                        {
+                            stack.lock().await.push(entry);
+                            return;
+                        }
+
+                        let mut content = String::new();
+                        let mut file = match self.vfs.open_file(&entry).await {
+                            Ok(file) => file,
+                            Err(err) => {
+                                error!("unable to open file {entry} because {err}");
+                                return;
+                            }
+                        };
+
+                        match file.read_to_string(&mut content).await {
+                            Ok(_) => {}
+                            Err(err) => {
+                                error!("unable to read file {entry} because {err}");
+                                return;
+                            }
+                        }
+
+                        let resource = match FluentResource::try_new(content) {
+                            Ok(resource) => resource,
+                            Err(err) => {
+                                error!("unable to parse resource {entry} because {:?}", err.1);
+                                return;
+                            }
+                        };
+
+                        match bundle.write().await.add_resource(resource) {
+                            Ok(_) => {}
+                            Err(err) => {
+                                error!("unable to add resource {entry} because {err:?}");
+                            }
+                        };
+                    }
+                }),
+                Err(err) => {
+                    error!("unable to read directory {path} because {err}");
+                    return Err(err);
+                }
+            }
+            .await;
+        }
+
+        Ok(bundle)
+    }
+
+    pub async fn load_langs(&self) -> VfsResult<LangManager> {
+        let folder = self.ensure_lang_folder().await?;
+        let meta = self.load_lang_meta(&folder).await?;
 
         let map = self
             .vfs
@@ -520,75 +596,14 @@ impl ResourceManager {
                 if entry == LANG_META_FILE {
                     return map;
                 }
-                
-                let lang_id = match entry.parse::<LanguageIdentifier>() {
-                    Ok(lang_id) => lang_id,
+
+                let bundle = match self.load_lang(&folder.join(VfsPath::new(&entry))).await {
+                    Ok(bundle) => bundle,
                     Err(err) => {
-                        error!("unable to parse language identifier {entry} because {err}");
+                        error!("unable to load language {entry} because {err}");
                         return map;
                     }
                 };
-
-                let stack = Arc::new(Mutex::new(vec![folder.join(entry.clone())]));
-                let bundle = Arc::new(RwLock::new(FluentBundle::new_concurrent(vec![lang_id])));
-
-                while let Some(path) = stack.lock().await.pop() {
-                    match self.vfs.read_dir(&path).await {
-                        Ok(reader) => reader.for_each(|e| {
-                            let bundle = bundle.clone();
-                            let stack = stack.clone();
-                            let path = path.clone();
-
-                            async move {
-                                let entry = path.join(e);
-
-                                if let Ok(meta) = self.vfs.metadata(&entry).await
-                                    && matches!(meta.file_type, VfsFileType::Directory)
-                                {
-                                    stack.lock().await.push(entry);
-                                    return;
-                                }
-
-                                let mut content = String::new();
-                                let mut file = match self.vfs.open_file(&entry).await {
-                                    Ok(file) => file,
-                                    Err(err) => {
-                                        error!("unable to open file {entry} because {err}");
-                                        return;
-                                    }
-                                };
-
-                                match file.read_to_string(&mut content).await {
-                                    Ok(_) => {}
-                                    Err(err) => {
-                                        error!("unable to read file {entry} because {err}");
-                                        return;
-                                    }
-                                }
-
-                                let resource = match FluentResource::try_new(content) {
-                                    Ok(resource) => resource,
-                                    Err(err) => {
-                                        error!("unable to parse resource {entry} because {:?}", err.1);
-                                        return;
-                                    }
-                                };
-
-                                match bundle.write().await.add_resource(resource) {
-                                    Ok(_) => {}
-                                    Err(err) => {
-                                        error!("unable to add resource {entry} because {err:?}");
-                                    }
-                                };
-                            }
-                        }),
-                        Err(err) => {
-                            error!("unable to read directory {path} because {err}");
-                            return map;
-                        }
-                    }
-                    .await;
-                }
 
                 map.insert(entry, bundle);
 

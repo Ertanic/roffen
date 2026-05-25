@@ -60,3 +60,23 @@ pub fn make_response(status: StatusCode, content: &str) -> Response {
     *res.status_mut() = status;
     res
 }
+
+pub trait AsyncOption<T> {
+    async fn async_or_else<F, Fut>(self, f: F) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Option<T>>;
+}
+
+impl<T> AsyncOption<T> for Option<T> {
+    async fn async_or_else<F, Fut>(self, f: F) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Option<T>>,
+    {
+        match self {
+            Some(value) => Some(value),
+            None => f().await,
+        }
+    }
+}
