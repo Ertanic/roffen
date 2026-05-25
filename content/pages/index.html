@@ -17,7 +17,7 @@
 <main>
     <div class="flex three two">
         <section id="contents-table" class="center flow">
-            <h1>Contents</h1>
+            <h1>{{ lang("main-page-contents") }}</h1>
             <ol id="contents-table-list"></ol>
         </section>
         <section id="content">
@@ -25,29 +25,21 @@
                 <h1>{{ lang("main-page-about") }}</h1>
                 <p>{{ lang("main-page-about-paragraph-1") }}</p>
                 <p>{{ lang("main-page-about-paragraph-2") }}</p>
-                <p>Alternatively, you can use the interactive article editor in the <a href="/admin/posts">admin
-                    panel</a>.</p>
-                <p>The pages editor is in development. You can follow the development process in the <a
-                        href="https://github.com/Ertanic/roffen">repository</a>.</p>
+                <p>{{ lang("main-page-about-paragraph-3") }}</p>
+                <p>{{ lang("main-page-about-paragraph-4") }}</p>
 
-                <h2>Another plans</h2>
+                <h2>{{ lang("main-page-plans") }}</h2>
                 <ul>
-                    <li>translating</li>
-                    <li>adding more components</li>
-                    <li>adding themes support</li>
+                    <li>{{ lang("main-page-plan-1") }}</li>
+                    <li>{{ lang("main-page-plan-2") }}</li>
+                    <li>{{ lang("main-page-plan-3") }}</li>
                 </ul>
             </article>
 
             <article>
-                <h1>Pages</h1>
-                <p>Since the page editor is still under development, you will have to create pages manually.</p>
-                <p>To do this, create an <code>index.html</code> file in <code>content/pages/</code>. This action will
-                    override the existing main page. To create or override a subpage like <code>/posts</code>, create an
-                    <code>index.html</code> file in <code>content/pages/posts/</code>.</p>
-
-                <p>It is also worth noting that templates have the property of inheritance, which means that the
-                    <code>header.html</code> template can also be used in <code>content/pages/posts/index.html</code>.
-                </p>
+                <h1>{{ lang("main-page-pages") }}</h1>
+                <p>{{ lang("main-page-pages-paragraph-1") }}</p>
+                <p>{{ lang("main-page-pages-paragraph-2") }}</p>
 
                 <pre class="mermaid center">
                     treeView-beta
@@ -59,40 +51,35 @@
                                     "index.html"
                 </pre>
 
-                <h2>Templates</h2>
-                <p>The engine uses upon for page templates, which is a simple yet powerful engine. You can read more
-                    about it in its <a href="https://docs.rs/upon/latest/upon/">documentation</a>.</p>
-                <p>Let's talk about the functions that are implemented and registered in the engine.</p>
+                <h2>{{ lang("main-page-templates") }}</h2>
+                <p>{{ lang("main-page-templates-paragraph-1") }}</p>
+                <p>{{ lang("main-page-templates-paragraph-2") }}</p>
                 <ul>
-                    <li><code>is_map(val) -> bool</code> - checks if the current value is a map.</li>
-                    <li><code>len(val) -> i64</code> - get the length of the current value.</li>
-                    <li><code>date(timestamp, format) -> string</code> - formats a timestamp into a date string.</li>
-                    <li><code>eq(left, right) -> bool</code> - checks if two values are equal.</li>
-                    <li><code>and(first, second) -> bool</code> - checks if two values are both true.</li>
+                    <li><code>is_map(val) -> bool</code> - {{ lang("main-page-template-function-1") }}</li>
+                    <li><code>len(val) -> i64</code> - {{ lang("main-page-template-function-2") }}</li>
+                    <li><code>date(timestamp, format) -> string</code> - {{ lang("main-page-template-function-3") }}</li>
+                    <li><code>eq(left, right) -> bool</code> - {{ lang("main-page-template-function-4") }}</li>
+                    <li><code>and(first, second) -> bool</code> - {{ lang("main-page-template-function-5") }}</li>
                     <li><code>default
                         <T>(val, default) -> T
-                    </code> - returns the default value if the current value is empty.
-                    </li>
-                    <li><code>all_posts() -> Post[]</code> - returns all posts.</li>
-                    <li><code>posts(count, offset) -> Post[]</code> - returns a list of posts.</li>
-                    <li><code>get_post_by_id(id) -> Post</code> - returns a post by its ID.</li>
-                    <li><code>get_pages() -> Page</code> - returns all pages.</li>
+                    </code> - {{ lang("main-page-template-function-6") }}</li>
+                    <li><code>all_posts() -> Post[]</code> - {{ lang("main-page-template-function-7") }}</li>
+                    <li><code>posts(count, offset) -> Post[]</code> - {{ lang("main-page-template-function-8") }}</li>
+                    <li><code>get_post_by_id(id) -> Post</code> - {{ lang("main-page-template-function-9") }}</li>
+                    <li><code>get_pages() -> Page</code> - {{ lang("main-page-template-function-10") }}</li>
                 </ul>
 
-                <p>In addition to functions, the following values are passed to templates:</p>
+                <p>{{ lang("main-page-template-values") }}</p>
                 <ul>
-                    <li><code>auth: Option&lt;JwtPayload&gt;</code> - authentication status.</li>
-                    <li><code>query: Map&lt;string, string&gt;</code> - query parameters.</li>
+                    <li><code>auth: Option&lt;JwtPayload&gt;</code> - {{ lang("main-page-template-value-1") }}</li>
+                    <li><code>query: Map&lt;string, string&gt;</code> - {{ lang("main-page-template-value-2") }}</li>
                 </ul>
 
                 <blockquote>
-                    If you don't have any functions or values in the template engine, you can always manually add them.
-                    See this <a
-                        href="https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs">file</a>
-                    and the project <a href="#Build">build</a> method.
+                    {{ lang("main-page-template-quote") }}
                 </blockquote>
 
-                <p>Let's now look at the fields of structures that are returned from functions and constants.</p>
+                <p>{{ lang("main-page-template-structure") }}</p>
                 <pre><code class="language-rust">
 struct Post {
     id: String,
@@ -125,12 +112,9 @@ struct JwtPayload {
             </article>
 
             <article>
-                <h1>Components</h1>
-                <p>The engine is somewhat modular, which means that you can write your own components, connect them to
-                    the engine, and use them in your own articles.</p>
-                <p>Each module must contain/compile <code>index.js</code> and <code>meta.ron</code> and be located in
-                    the corresponding directory
-                    under <code>content/components/</code>.</p>
+                <h1>{{ lang("main-page-components") }}</h1>
+                <p>{{ lang("main-page-components-paragraph-1") }}</p>
+                <p>{{ lang("main-page-components-paragraph-2") }}</p>
                 <pre class="mermaid center">
                     treeView-beta
                         "content"
@@ -145,12 +129,7 @@ struct JwtPayload {
                                     "index.js"
                                     "meta.ron"
                 </pre>
-                <p>First, let's explore the component's life cycle. In general, everything is clear here, except for the
-                    difference between <code>mount</code> and <code>normalize</code>. The only difference is that <code>mount</code>
-                    is triggered by a drag
-                    event, while <code>normalize</code> is triggered by page loading and converts the component
-                    according to its
-                    properties.</p>
+                <p>{{ lang("main-page-components-lifecycle") }}</p>
                 <pre class="mermaid center">
                     flowchart TD
                         A[mount] --> B[set size]
@@ -161,9 +140,8 @@ struct JwtPayload {
                         I -->|data from props| E
                 </pre>
 
-                <h2>Implementation</h2>
-                <p>Let's try to implement the image component. To do this, create a project with the following
-                    content:</p>
+                <h2>{{ lang("main-page-components-implementation") }}</h2>
+                <p>{{ lang("main-page-components-implementation-paragraph") }}</p>
                 <ul>
                     <li>
                         <div>
@@ -252,27 +230,26 @@ ComponentMeta(
                     </li>
                 </ul>
 
-                <p>Now we can use this component in the editor.</p>
+                <p>{{ lang("main-page-components-use") }}</p>
                 <img src="/examples/img_component.png" alt="img component">
 
-                <h2>Rendering</h2>
-                <p>There are several things you need to do to render components on a page:</p>
+                <h2>{{ lang("main-page-components-rendering") }}</h2>
+                <p>{{ lang("main-page-components-rendering-paragraph") }}</p>
                 <ol>
                     <li>
-                        <p>Add the required styles to the page.</p>
+                        <p>{{ lang("main-page-components-rendering-step-1") }}</p>
                         <pre><code class="language-html">
 &lt;link rel="stylesheet" href="/view/css/styles.css"&gt;
                         </code></pre>
                     </li>
                     <li>
-                        <p>Next, you need to add the following script to your page.</p>
+                        <p>{{ lang("main-page-components-rendering-step-2") }}</p>
                         <pre><code class="language-html">
 &lt;script src="/view/js/index.js"&gt;&lt;/script&gt;
                         </code></pre>
                     </li>
                     <li>
-                        <p>Finally, you can use components by generating their data containers inside a container with
-                            the <code>.grid-content</code> class.</p>
+                        <p>{{ lang("main-page-components-rendering-step-3") }}</p>
                         <pre><code class="language-handlebars">
 &lt;div class="grid-content"&gt;
     {&percnt; for comp in post.content &percnt;}
@@ -288,40 +265,31 @@ ComponentMeta(
                         </code></pre>
                     </li>
                     <li>
-                        <p>To view the results of the script, see the <a href="/posts">Posts</a> page.</p>
+                        <p>{{ lang("main-page-components-rendering-step-4") }}</p>
                     </li>
                 </ol>
 
-                <h2>Why</h2>
-                <p>Why such difficulties? At first, I planned to make components using an embedded language, but I
-                    quickly abandoned this idea
-                    because it would have complicated interaction with the DOM tree. Therefore, I had to use native
-                    JS/TS scripts to give you complete freedom of action.</p>
+                <h2>{{ lang("main-page-components-why") }}</h2>
+                <p>{{ lang("main-page-components-why-paragraph") }}</p>
             </article>
 
             <article>
-                <h1>Build</h1>
-                <p>To build the project, you will need several things:</p>
+                <h1>{{ lang("main-page-build") }}</h1>
+                <p>{{ lang("main-page-build-paragraph-1") }}</p>
                 <ol>
                     <li><a href="https://rust-lang.org/tools/install/">rust toolchain</a></li>
                     <li><a href="https://bun.sh/">bun</a></li>
                 </ol>
 
-                <p>If everything is installed, you can use the following command, which will compile both the server and
-                    all the typescript code in release mode, optimizing the entire code.</p>
+                <p>{{ lang("main-page-build-paragraph-2") }}</p>
                 <pre><code class="language-powershell">
 cargo build -r
                 </code></pre>
 
-                <p>Upon successful build, the executable file will appear in the
-                    <code>target/release/server(.exe)</code> path.</p>
-                <p>That's all, you won't need anything else in this directory, all resources from the
-                    <code>content/</code> folder
-                    are included in the output executable file by default.</p>
+                <p>{{ lang("main-page-build-paragraph-3") }}</p>
+                <p>{{ lang("main-page-build-paragraph-4") }}</p>
 
-                <p>In debug mode, the project can be started with the following command. In this case, no optimizations
-                    or content inclusion will be applied, so you can safely change the contents of this folder in live
-                    mode.</p>
+                <p>{{ lang("main-page-build-debug") }}</p>
                 <pre><code class="language-powershell">
 cargo run
                 </code></pre>
