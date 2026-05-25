@@ -15,14 +15,7 @@ pub struct LangMetaEntry {
 }
 
 #[derive(Deserialize)]
-pub struct ServerLangConfig {
-    pub current: String,
-    pub default: String,
-}
-
-#[derive(Deserialize)]
 pub struct LangMeta {
-    pub server: ServerLangConfig,
     pub lang: Vec<LangMetaEntry>,
 }
 
@@ -104,8 +97,14 @@ impl LangManager {
 
     pub async fn replace_meta(&self, meta: LangMeta) {
         *self.0.langs.lock().await = meta.lang;
-        *self.0.current_lang.write().await = meta.server.current;
-        *self.0.default_lang.write().await = meta.server.default;
+    }
+
+    pub async fn set_current(&self, lang: String) {
+        *self.0.current_lang.write().await = lang;
+    }
+
+    pub async fn set_default(&self, lang: String) {
+        *self.0.default_lang.write().await = lang;
     }
 
     pub async fn replace_lang(&self, lang: String, bundle: LangBundle) {

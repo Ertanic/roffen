@@ -1,7 +1,3 @@
-[server]
-current = "en-US"
-default = "en-US"
-
 [[lang]]
 code = "en-US"
 name = "english"

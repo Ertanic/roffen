@@ -1,5 +1,0 @@
-secret = "super-secret-key-change-me"
-
-[[users]]
-login = "admin"
-password = "admin"

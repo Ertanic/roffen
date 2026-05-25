@@ -1,6 +1,7 @@
 use crate::{
     AuthContext, BoxStream, ResourceRefType, Response,
     api::{ApiContext, auth::JwtPayload},
+    config::ArcConfig,
     consts::AUTH_COOKIE_NAME,
     lang::LangManager,
     resources::ResourceManager,
@@ -115,7 +116,7 @@ pub struct SystemPath {
 
 pub struct BulldozerContext {
     pub router: Arc<RwLock<MethodRouter>>,
-    pub auth: Arc<AuthContext>,
+    pub config: ArcConfig,
     pub vfs: VirtualFS,
     pub resources: Arc<RwLock<ResourceManager>>,
     pub system_paths: Vec<SystemPath>,
@@ -124,7 +125,7 @@ pub struct BulldozerContext {
 
 pub struct Bulldozer {
     router: Arc<RwLock<MethodRouter>>,
-    auth: Arc<AuthContext>,
+    config: ArcConfig,
     vfs: VirtualFS,
     resources: Arc<RwLock<ResourceManager>>,
     system_paths: Vec<SystemPath>,
@@ -136,7 +137,7 @@ impl Bulldozer {
         Self {
             lang_manager: ctx.lang_manager,
             router: ctx.router,
-            auth: ctx.auth,
+            config: ctx.config,
             vfs: ctx.vfs,
             resources: ctx.resources,
             system_paths: ctx.system_paths,
@@ -160,7 +161,7 @@ impl Service<Request<Incoming>> for Bulldozer {
         let resources = Arc::clone(&self.resources);
         let vfs = Arc::clone(&self.vfs);
         let router = Arc::clone(&self.router);
-        let auth_context = Arc::clone(&self.auth);
+        let config = Arc::clone(&self.config);
         let method = req.method().clone();
         let uri = req.uri();
         let path = uri.path().to_owned();
@@ -182,7 +183,7 @@ impl Service<Request<Incoming>> for Bulldozer {
             let result = router.at(MethodRoute::new(method.clone(), &path_clone));
 
             let headers = req.headers().clone();
-            let auth_ctx = Arc::clone(&auth_context);
+            let auth_ctx = config.read().await.auth.clone();
             let cookies = Arc::new(LazyLock::new(|| parse_cookies(headers)));
             let cookies_jwt = Arc::clone(&cookies);
             let auth = Arc::new(LazyLock::new(move || decode_jwt_from_cookies(&cookies_jwt, &auth_ctx)));
@@ -335,7 +336,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         request: req,
                         query,
                         cookies,
-                        auth_context,
+                        config,
                         resources,
                         jwt,
                     };

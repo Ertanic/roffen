@@ -14,10 +14,9 @@ use macros::callback;
 use serde::{Deserialize, Serialize};
 use url_encoded_data::UrlEncodedData;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct AuthContext {
     pub secret: String,
-    pub users: Vec<UserCredentials>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -26,7 +25,7 @@ pub struct JwtPayload {
     pub exp: usize,
 }
 
-#[derive(Deserialize, PartialEq)]
+#[derive(Deserialize, PartialEq, Clone)]
 pub struct UserCredentials {
     login: String,
     password: String,
@@ -67,7 +66,7 @@ pub fn login(mut ctx: ApiContext) -> BoxFuture<'static, Response> {
         .unwrap_or_default();
     let credentials = UserCredentials { login: username, password };
 
-    for user in &ctx.auth_context.users {
+    for user in &ctx.config.read().await.users {
         if *user != credentials {
             continue;
         }
@@ -78,7 +77,7 @@ pub fn login(mut ctx: ApiContext) -> BoxFuture<'static, Response> {
             username: user.login.to_string(),
             exp,
         };
-        let encode_key = EncodingKey::from_secret(ctx.auth_context.secret.as_bytes());
+        let encode_key = EncodingKey::from_secret(ctx.config.read().await.auth.secret.as_bytes());
 
         let jwt = jsonwebtoken::encode(&Header::default(), &payload, &encode_key).expect("failed to encode jwt");
 

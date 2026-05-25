@@ -1,6 +1,7 @@
 use crate::{
     ResourceRefType,
-    consts::{LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, PUBLIC_FOLDER},
+    config::ArcConfig,
+    consts::{CONFIG_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, PUBLIC_FOLDER},
     lang::LangManager,
     resources::ResourceManager,
     routing::{MethodRouter, get},
@@ -23,6 +24,22 @@ trait EventFabric {
     fn created(&self) -> ContentEventKind;
     fn modified(&self) -> ContentEventKind;
     fn removed(&self) -> ContentEventKind;
+}
+
+struct ConfigEventFabric;
+
+impl EventFabric for ConfigEventFabric {
+    fn created(&self) -> ContentEventKind {
+        ContentEventKind::NewConfig
+    }
+
+    fn modified(&self) -> ContentEventKind {
+        ContentEventKind::NewConfig
+    }
+
+    fn removed(&self) -> ContentEventKind {
+        ContentEventKind::NewConfig
+    }
 }
 
 struct PublicEventFabric;
@@ -75,6 +92,7 @@ impl EventFabric for LangEventFabric {
 
 #[derive(Debug, PartialEq)]
 pub enum ContentEventKind {
+    NewConfig,
     NewPublic,
     NewPage,
     NewLang,
@@ -106,6 +124,14 @@ impl ContentEvent {
             ContentEvent::None => panic!("unwrap_path() called on ContentEvent::None"),
         }
     }
+}
+
+#[derive(Clone)]
+pub struct InitWatcherContext {
+    pub router: Arc<RwLock<MethodRouter>>,
+    pub resources: Arc<RwLock<ResourceManager>>,
+    pub config: ArcConfig,
+    pub lang_manager: LangManager,
 }
 
 pub type FilesListener = crossbeam_channel::Receiver<notify::Result<Event>>;
@@ -182,37 +208,17 @@ fn real_path_to_vfs(root: &Path, path: &Path) -> Option<VfsPath> {
     path.strip_prefix(root).map(|p| VfsPath::new(p.to_string_lossy().replace('\\', "/"))).ok()
 }
 
-pub fn init_watcher(content: &Path, router: Arc<RwLock<MethodRouter>>, resources: Arc<RwLock<ResourceManager>>, lang_manager: LangManager) {
-    watch_folder(
-        PagesEventFabric,
-        &content.join(PAGES_FOLDER),
-        Arc::clone(&router),
-        Arc::clone(&resources),
-        lang_manager.clone(),
-    );
-    watch_folder(
-        PublicEventFabric,
-        &content.join(PUBLIC_FOLDER),
-        Arc::clone(&router),
-        Arc::clone(&resources),
-        lang_manager.clone(),
-    );
-    watch_folder(
-        LangEventFabric,
-        &content.join(LANG_FOLDER),
-        Arc::clone(&router),
-        Arc::clone(&resources),
-        lang_manager,
-    );
+pub fn init_watcher(content: &Path, context: InitWatcherContext) {
+    watch_folder(PagesEventFabric, &content.join(PAGES_FOLDER), context.clone());
+    watch_folder(PublicEventFabric, &content.join(PUBLIC_FOLDER), context.clone());
+    watch_folder(LangEventFabric, &content.join(LANG_FOLDER), context.clone());
+    watch_folder(ConfigEventFabric, &content.join(CONFIG_FILENAME), context);
 }
 
-fn watch_folder(
-    fabric: impl EventFabric + Send + Sync + 'static,
-    path: &Path,
-    router: Arc<RwLock<MethodRouter>>,
-    resources: Arc<RwLock<ResourceManager>>,
-    lang: LangManager,
-) {
+fn watch_folder<F>(fabric: F, path: &Path, context: InitWatcherContext)
+where
+    F: EventFabric + Send + Sync + 'static,
+{
     let (tx, rx) = crossbeam_channel::unbounded();
 
     let mut watcher = match notify::recommended_watcher(tx) {
@@ -237,7 +243,7 @@ fn watch_folder(
             };
 
             tokio::spawn(async move {
-                watch_content(watcher, router, resources, lang).await;
+                watch_content(watcher, context).await;
             });
         }
         Err(err) => {
@@ -246,24 +252,29 @@ fn watch_folder(
     }
 }
 
-async fn watch_content(mut watcher: FilesWatcher, router: Arc<RwLock<MethodRouter>>, resources: Arc<RwLock<ResourceManager>>, lang: LangManager) {
+async fn watch_content(mut watcher: FilesWatcher, context: InitWatcherContext) {
     loop {
         for event in &mut watcher {
             if let ContentEvent::Change { path, kind } = event {
                 match kind {
                     ContentEventKind::NewPublic => {
-                        let mut router = router.write().await;
+                        let mut router = context.router.write().await;
                         let resource = ResourceRefType::File(VfsPath::new(PUBLIC_FOLDER).join(path.clone()));
                         if let Err(err) = router.try_add(get(&path), resource) {
                             error!("unable to update router with route {path} because {err}");
                         }
                     }
                     ContentEventKind::NewPage => {
-                        let mut router = router.write().await;
-                        resources.read().await.load_page(&mut router, VfsPath::new(PAGES_FOLDER).join(path)).await
+                        let mut router = context.router.write().await;
+                        context
+                            .resources
+                            .read()
+                            .await
+                            .load_page(&mut router, VfsPath::new(PAGES_FOLDER).join(path))
+                            .await
                     }
                     ContentEventKind::RemovePublic | ContentEventKind::RemovePage => {
-                        let mut router = router.write().await;
+                        let mut router = context.router.write().await;
                         router.remove(get(&path))
                     }
                     ContentEventKind::NewLang | ContentEventKind::RemoveLang => {
@@ -272,14 +283,14 @@ async fn watch_content(mut watcher: FilesWatcher, router: Arc<RwLock<MethodRoute
                         if file.filename().starts_with(LANG_META_FILE) {
                             info!("language meta {file} has been changed");
 
-                            let new_meta = match resources.read().await.load_lang_meta(&VfsPath::new(LANG_FOLDER)).await {
+                            let new_meta = match context.resources.read().await.load_lang_meta(&VfsPath::new(LANG_FOLDER)).await {
                                 Ok(meta) => meta,
                                 Err(err) => {
                                     error!("unable to load language meta {file} because {err}");
                                     continue;
                                 }
                             };
-                            lang.replace_meta(new_meta).await;
+                            context.lang_manager.replace_meta(new_meta).await;
                         }
                         else {
                             info!("language {file} has been changed");
@@ -291,7 +302,7 @@ async fn watch_content(mut watcher: FilesWatcher, router: Arc<RwLock<MethodRoute
                                 path = parent;
                             }
 
-                            let bundle = match resources.read().await.load_lang(&path).await {
+                            let bundle = match context.resources.read().await.load_lang(&path).await {
                                 Ok(bundle) => bundle,
                                 Err(err) => {
                                     error!("unable to load language {path} because {err}");
@@ -299,8 +310,25 @@ async fn watch_content(mut watcher: FilesWatcher, router: Arc<RwLock<MethodRoute
                                 }
                             };
 
-                            lang.replace_lang(path.filename(), bundle).await;
+                            context.lang_manager.replace_lang(path.filename(), bundle).await;
                         }
+                    }
+                    ContentEventKind::NewConfig => {
+                        info!("config has been changed");
+                        let new_config = match context.resources.read().await.try_load_config().await {
+                            Ok(c) => c,
+                            Err(err) => {
+                                error!("unable to load config because {err}");
+                                continue;
+                            }
+                        };
+                        debug!("config loaded, try set new lang");
+                        context.lang_manager.set_current(new_config.lang.current.clone()).await;
+                        debug!("try set new default lang");
+                        context.lang_manager.set_default(new_config.lang.default.clone()).await;
+                        debug!("try set new config");
+                        *context.config.write().await = new_config;
+                        info!("new config loaded");
                     }
                 }
             }

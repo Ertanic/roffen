@@ -1,4 +1,5 @@
 mod api;
+mod config;
 mod consts;
 mod lang;
 mod logs;
@@ -17,12 +18,12 @@ use crate::{
         posts::{create_post, delete_post, get_posts, new_post, update_post},
         resources::get_resources_in_folder,
     },
-    consts::CONTENT_FOLDER,
+    consts::{CONTENT_FOLDER, DEFAULT_LANG_CODE},
     logs::setup_logger,
     resources::{ResourceManager, api, get_root},
     routing::{Bulldozer, BulldozerContext, MethodRouter, SystemPath, delete, get, patch, post},
     vfs::{PageLayout, VfsPath, init_vfs},
-    watcher::init_watcher,
+    watcher::{InitWatcherContext, init_watcher},
 };
 use futures_util::{future::BoxFuture, stream};
 use http_body_util::StreamBody;
@@ -31,7 +32,7 @@ use hyper::{
     body::{Bytes, Frame},
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use log::{error, info};
+use log::{debug, error, info};
 use std::{
     fmt::{Debug, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -83,7 +84,7 @@ async fn main() {
 
     let resources = Arc::new(RwLock::new(ResourceManager::new(Arc::clone(&vfs))));
 
-    let auth_context = Arc::new(resources.read().await.load_auth().await);
+    let config = Arc::new(RwLock::new(resources.read().await.load_config().await));
 
     let mut router = MethodRouter::default();
 
@@ -102,7 +103,16 @@ async fn main() {
     let router = resources.read().await.load_public(router).await;
     let router = resources.read().await.load_pages(router).await;
 
-    let lang_manager = resources.read().await.load_langs().await.expect("unable to load languages");
+    let lang_manager = {
+        let config = config.read().await;
+        debug!("current lang: {}, default: {}", config.lang.current, config.lang.default);
+        resources
+            .read()
+            .await
+            .load_langs(config.lang.default.clone(), config.lang.current.clone())
+            .await
+            .expect("unable to load languages")
+    };
 
     let router = Arc::new(RwLock::new(router));
 
@@ -132,27 +142,34 @@ async fn main() {
     let ctx = BulldozerContext {
         router: Arc::clone(&router),
         resources: Arc::clone(&resources),
-        auth: auth_context,
+        config: Arc::clone(&config),
         vfs,
         system_paths,
         lang_manager: lang_manager.clone(),
     };
     let bulldozer = Arc::new(Bulldozer::new(ctx));
 
-    init_watcher(&content_folder, Arc::clone(&router), Arc::clone(&resources), lang_manager);
+    let context = InitWatcherContext {
+        router: Arc::clone(&router),
+        resources: Arc::clone(&resources),
+        config: Arc::clone(&config),
+        lang_manager,
+    };
+    init_watcher(&content_folder, context);
 
-    let sec = resources.read().await.load_security().await;
+    let sec = config.read().await.sec.clone(); // avoiding deadlock
+    
     if let Some(sec) = sec {
         let certs_folder = root.join("certs");
         let cert_path = if sec.tls.cert.is_absolute() {
-            sec.tls.cert
+            sec.tls.cert.clone()
         }
         else {
             certs_folder.join(&sec.tls.cert)
         };
 
         let cert_key_path = if sec.tls.key.is_absolute() {
-            sec.tls.key
+            sec.tls.key.clone()
         }
         else {
             certs_folder.join(&sec.tls.key)

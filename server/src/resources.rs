@@ -2,14 +2,14 @@ use crate::{
     PageLayout, ResourceRefType, Response,
     api::{
         ApiContext,
-        auth::AuthContext,
         components::{Component, ComponentMeta},
         posts::{Post, PostBody},
         resources::{ResourceInfo, ResourceType},
     },
+    config::Config,
     consts::{
-        AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, POSTS_FOLDER,
-        PUBLIC_FOLDER, SEC_FILENAME,
+        COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, CONFIG_FILENAME, INDEX_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, POSTS_FOLDER,
+        PUBLIC_FOLDER,
     },
     lang::{LangBundle, LangManager, LangMeta},
     routing::{MethodRouter, get},
@@ -23,13 +23,13 @@ use futures_util::{
     stream,
     stream::{BoxStream, StreamExt},
 };
-use log::{debug, error, trace, warn};
+use log::{debug, error, info, trace, warn};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 use unic_langid::LanguageIdentifier;
-use vfs::{VfsError, VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
 
 pub trait BoxedApiCallback {
     fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static>;
@@ -60,13 +60,13 @@ pub enum GetPostsRequest {
     Chunk { count: usize, offset: usize },
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct TlsContext {
     pub cert: PathBuf,
     pub key: PathBuf,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct SecurityContext {
     pub tls: TlsContext,
 }
@@ -80,38 +80,21 @@ impl ResourceManager {
         Self { vfs }
     }
 
-    pub async fn load_auth(&self) -> AuthContext {
-        let mut buf = String::new();
-        let filepath = VfsPath::new(AUTH_FILENAME);
-
-        self.vfs
-            .open_file(&filepath)
-            .await
-            .expect("unable to open auth context")
-            .read_to_string(&mut buf)
-            .await
-            .expect("unable to read auth config file");
-
-        let auth = toml::from_str(&buf).expect("unable to parse auth config file");
-
-        debug!("auth context loaded");
-
-        auth
+    pub async fn load_config(&self) -> Config {
+        self.try_load_config().await.expect("load config failed")
     }
 
-    pub async fn load_security(&self) -> Option<SecurityContext> {
+    pub async fn try_load_config(&self) -> VfsResult<Config> {
+        let filepath = VfsPath::new(CONFIG_FILENAME);
         let mut buf = String::new();
-        let filepath = VfsPath::new(SEC_FILENAME);
 
-        if let Ok(mut file) = self.vfs.open_file(&filepath).await {
-            file.read_to_string(&mut buf).await.expect("unable to read sec config file");
-            let sec = toml::from_str(&buf).expect("unable to parse security config file");
-            debug!("security context loaded");
-            Some(sec)
-        }
-        else {
-            None
-        }
+        self.vfs.open_file(&filepath).await?.read_to_string(&mut buf).await?;
+
+        let config = toml::from_str(&buf).map_err(|e| VfsErrorKind::Other(e.to_string()))?;
+
+        info!("config {filepath} has been loaded");
+
+        Ok(config)
     }
 
     pub async fn load_pages(&self, mut router: MethodRouter) -> MethodRouter {
@@ -584,7 +567,7 @@ impl ResourceManager {
         Ok(bundle)
     }
 
-    pub async fn load_langs(&self) -> VfsResult<LangManager> {
+    pub async fn load_langs(&self, default_lang: String, current_lang: String) -> VfsResult<LangManager> {
         let folder = self.ensure_lang_folder().await?;
         let meta = self.load_lang_meta(&folder).await?;
 
@@ -611,7 +594,7 @@ impl ResourceManager {
             })
             .await;
 
-        Ok(LangManager::new(meta.server.current, meta.server.default, map, meta.lang))
+        Ok(LangManager::new(current_lang, default_lang, map, meta.lang))
     }
 
     pub async fn get_resources_in_folder(&self, folder: &str) -> VfsResult<BoxStream<'static, ResourceInfo>> {

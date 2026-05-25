@@ -1,3 +1,0 @@
-[tls]
-cert = "server-cert.pem"
-key = "server-key.pem"
