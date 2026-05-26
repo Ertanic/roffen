@@ -1,12 +1,12 @@
 use crate::{
-    AuthContext, BoxStream, ResourceRefType, Response,
+    AppContext, AuthContext, BoxStream, ResourceRefType, Response,
     api::{ApiContext, auth::JwtPayload},
     config::ArcConfig,
     consts::AUTH_COOKIE_NAME,
     lang::LangManager,
     resources::ResourceManager,
     templates::functions::register_functions,
-    utils::{make_internal_error, make_not_found, make_see_other},
+    utils::{make_internal_error, make_not_found},
     vfs::VirtualFS,
 };
 use cookie::Cookie;
@@ -31,6 +31,8 @@ use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
 use vfs::async_vfs::AsyncFileSystem;
+
+pub type RequestHook = Box<dyn Fn(&HookContext) -> Option<Response> + Send + Sync + 'static>;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -70,8 +72,9 @@ pub struct MethodRouter {
 
 impl MethodRouter {
     const INSERT_ERROR: &'static str = "failed to insert route";
-    pub fn add(&mut self, route: MethodRoute, resource: ResourceRefType) {
+    pub fn add(&mut self, route: MethodRoute, resource: ResourceRefType) -> &mut Self {
         self.try_add(route, resource).expect(Self::INSERT_ERROR);
+        self
     }
 
     pub fn try_add(&mut self, route: MethodRoute, resource: ResourceRefType) -> Result<(), InsertError> {
@@ -107,20 +110,11 @@ impl MethodRouter {
     }
 }
 
-#[derive(Clone)]
-pub struct SystemPath {
-    pub path: &'static str,
-    pub method: Method,
-    pub auth_required: bool,
-}
-
-pub struct BulldozerContext {
-    pub router: Arc<RwLock<MethodRouter>>,
+pub struct HookContext {
+    pub request: Request<Incoming>,
     pub config: ArcConfig,
-    pub vfs: VirtualFS,
     pub resources: Arc<RwLock<ResourceManager>>,
-    pub system_paths: Vec<SystemPath>,
-    pub lang_manager: LangManager,
+    pub jwt: Option<JwtPayload>,
 }
 
 pub struct Bulldozer {
@@ -128,20 +122,38 @@ pub struct Bulldozer {
     config: ArcConfig,
     vfs: VirtualFS,
     resources: Arc<RwLock<ResourceManager>>,
-    system_paths: Vec<SystemPath>,
+    hooks: Arc<RwLock<Vec<RequestHook>>>,
     lang_manager: LangManager,
 }
 
 impl Bulldozer {
-    pub fn new(ctx: BulldozerContext) -> Self {
+    pub fn new(ctx: Arc<AppContext>) -> Self {
         Self {
-            lang_manager: ctx.lang_manager,
-            router: ctx.router,
-            config: ctx.config,
-            vfs: ctx.vfs,
-            resources: ctx.resources,
-            system_paths: ctx.system_paths,
+            lang_manager: ctx.lang_manager.clone(),
+            router: ctx.router.clone().clone(),
+            config: ctx.config.clone(),
+            vfs: ctx.vfs.clone(),
+            resources: ctx.resources.clone(),
+            hooks: Default::default(),
         }
+    }
+
+    pub async fn routes(&self, builder: impl FnOnce(&mut MethodRouter)) {
+        builder(&mut *self.router.write().await);
+    }
+
+    pub async fn load_public(&self) {
+        self.resources.read().await.load_public(&mut *self.router.write().await).await
+    }
+
+    pub async fn load_pages(&self) {
+        self.resources.read().await.load_pages(&mut *self.router.write().await).await
+    }
+}
+
+impl Bulldozer {
+    pub async fn add_hook(&self, hook: RequestHook) {
+        self.hooks.write().await.push(hook);
     }
 }
 
@@ -157,6 +169,7 @@ impl Service<Request<Incoming>> for Bulldozer {
             req.uri().path_and_query().map(|a| a.as_str()).unwrap_or_else(|| req.uri().path())
         );
 
+        let hooks = Arc::clone(&self.hooks);
         let lang_manager = self.lang_manager.clone();
         let resources = Arc::clone(&self.resources);
         let vfs = Arc::clone(&self.vfs);
@@ -174,8 +187,6 @@ impl Service<Request<Incoming>> for Bulldozer {
                     .collect::<HashMap<String, String>>()
             })
             .unwrap_or_default();
-
-        let system_paths = self.system_paths.clone();
 
         let result = async move {
             let path_clone = path.clone();
@@ -236,10 +247,16 @@ impl Service<Request<Incoming>> for Bulldozer {
                 ResourceRefType::Page { index, layouts } => {
                     trace!("found page resource ref: {index:?}");
 
-                    for sys_path in &system_paths {
-                        if sys_path.path == path && sys_path.method == method && (sys_path.auth_required && auth.is_none()) {
-                            trace!("found system path, redirecting to login page");
-                            return Ok(make_see_other(format!("/admin/login?next={path}").as_str()));
+                    let hook_ctx = HookContext {
+                        request: req,
+                        config: config.clone(),
+                        resources: resources.clone(),
+                        jwt: (**auth).clone(),
+                    };
+
+                    for hook in &*hooks.read().await {
+                        if let Some(result) = hook(&hook_ctx) {
+                            return Ok(result);
                         }
                     }
 

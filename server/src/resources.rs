@@ -97,14 +97,12 @@ impl ResourceManager {
         Ok(config)
     }
 
-    pub async fn load_pages(&self, mut router: MethodRouter) -> MethodRouter {
+    pub async fn load_pages(&self, router: &mut MethodRouter) {
         let mut pages = vec![PageDir::new(VfsPath::new(PAGES_FOLDER))];
 
         while let Some(page) = pages.pop() {
-            self._load_page(&mut router, &mut pages, page).await
+            self._load_page(router, &mut pages, page).await
         }
-
-        router
     }
 
     async fn _load_page(&self, router: &mut MethodRouter, pages: &mut Vec<PageDir>, page: PageDir) {
@@ -190,7 +188,7 @@ impl ResourceManager {
         }
     }
 
-    pub async fn load_public(&self, mut router: MethodRouter) -> MethodRouter {
+    pub async fn load_public(&self, router: &mut MethodRouter) {
         let mut dirs = vec![VfsPath::new(PUBLIC_FOLDER)];
 
         while let Some(dir) = dirs.pop() {
@@ -230,8 +228,6 @@ impl ResourceManager {
                 }
             }
         }
-
-        router
     }
 
     async fn ensure_posts_folder(&self) -> VfsResult<VfsPath> {

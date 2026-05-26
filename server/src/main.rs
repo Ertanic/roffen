@@ -5,6 +5,7 @@ mod lang;
 mod logs;
 mod resources;
 mod routing;
+mod server;
 mod templates;
 mod utils;
 mod vfs;
@@ -18,38 +19,38 @@ use crate::{
         posts::{create_post, delete_post, get_posts, new_post, update_post},
         resources::get_resources_in_folder,
     },
-    consts::{CONTENT_FOLDER, DEFAULT_LANG_CODE},
+    config::ArcConfig,
+    consts::{CONFIG_FILENAME, CONTENT_FOLDER, LANG_FOLDER, PAGES_FOLDER, PUBLIC_FOLDER},
+    lang::LangManager,
     logs::setup_logger,
     resources::{ResourceManager, api, get_root},
-    routing::{Bulldozer, BulldozerContext, MethodRouter, SystemPath, delete, get, patch, post},
-    vfs::{PageLayout, VfsPath, init_vfs},
-    watcher::{InitWatcherContext, init_watcher},
+    routing::{MethodRouter, delete, get, patch, post},
+    server::Server,
+    utils::make_see_other,
+    vfs::{PageLayout, VfsPath, VirtualFS, init_vfs},
+    watcher::{ConfigEventFabric, FilesWatcher, LangEventFabric, PagesEventFabric, PublicEventFabric},
 };
 use futures_util::{future::BoxFuture, stream};
 use http_body_util::StreamBody;
-use hyper::{
-    Method,
-    body::{Bytes, Frame},
-};
-use hyper_util::rt::{TokioExecutor, TokioIo};
-use log::{debug, error, info};
+use hyper::body::{Bytes, Frame};
+use log::debug;
 use std::{
     fmt::{Debug, Formatter},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
-use tokio::{net::TcpListener, sync::RwLock};
-use tokio_rustls::{
-    TlsAcceptor,
-    rustls::{
-        ServerConfig,
-        pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
-    },
-};
+use tokio::sync::RwLock;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
 type ApiCallback = Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Sync + Send>;
+
+struct AppContext {
+    pub router: Arc<RwLock<MethodRouter>>,
+    pub config: ArcConfig,
+    pub vfs: VirtualFS,
+    pub resources: Arc<RwLock<ResourceManager>>,
+    pub lang_manager: LangManager,
+}
 
 enum ResourceRefType {
     File(VfsPath),
@@ -73,35 +74,12 @@ impl Debug for ResourceRefType {
 async fn main() {
     setup_logger().expect("unable to start logs");
 
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8084);
-    let listener = TcpListener::bind(addr).await.expect("failed to bind");
-
-    info!("listening on {}", addr);
-
     let root = get_root();
     let content_folder = root.join(CONTENT_FOLDER);
     let vfs = init_vfs(&content_folder).await;
 
     let resources = Arc::new(RwLock::new(ResourceManager::new(Arc::clone(&vfs))));
-
     let config = Arc::new(RwLock::new(resources.read().await.load_config().await));
-
-    let mut router = MethodRouter::default();
-
-    router.add(post("/admin/login"), api(login));
-    router.add(get("/admin/logout"), api(logout));
-    router.add(get("/health"), ResourceRefType::Content(Bytes::from("ok")));
-    router.add(post("/api/posts"), api(create_post));
-    router.add(delete("/api/posts"), api(delete_post));
-    router.add(get("/api/posts"), api(get_posts));
-    router.add(patch("/api/posts"), api(update_post));
-    router.add(get("/components/js/{comp}"), api(get_component_js));
-    router.add(get("/components"), api(get_components));
-    router.add(get("/api/resources"), api(get_resources_in_folder));
-    router.add(get("/admin/posts/new"), api(new_post));
-
-    let router = resources.read().await.load_public(router).await;
-    let router = resources.read().await.load_pages(router).await;
 
     let lang_manager = {
         let config = config.read().await;
@@ -114,118 +92,52 @@ async fn main() {
             .expect("unable to load languages")
     };
 
-    let router = Arc::new(RwLock::new(router));
-
-    let system_paths = vec![
-        SystemPath {
-            path: "/admin",
-            method: Method::GET,
-            auth_required: true,
-        },
-        SystemPath {
-            path: "/admin/posts",
-            method: Method::GET,
-            auth_required: true,
-        },
-        SystemPath {
-            path: "/admin/pages",
-            method: Method::GET,
-            auth_required: true,
-        },
-        SystemPath {
-            path: "/admin/resources",
-            method: Method::GET,
-            auth_required: true,
-        },
-    ];
-
-    let ctx = BulldozerContext {
-        router: Arc::clone(&router),
+    let ctx = Arc::new(AppContext {
+        router: Default::default(),
         resources: Arc::clone(&resources),
         config: Arc::clone(&config),
         vfs,
-        system_paths,
         lang_manager: lang_manager.clone(),
-    };
-    let bulldozer = Arc::new(Bulldozer::new(ctx));
+    });
 
-    let context = InitWatcherContext {
-        router: Arc::clone(&router),
-        resources: Arc::clone(&resources),
-        config: Arc::clone(&config),
-        lang_manager,
-    };
-    init_watcher(&content_folder, context);
+    FilesWatcher::init(Arc::clone(&ctx), content_folder)
+        .watch(PublicEventFabric, PUBLIC_FOLDER.as_ref())
+        .watch(PagesEventFabric, PAGES_FOLDER.as_ref())
+        .watch(LangEventFabric, LANG_FOLDER.as_ref())
+        .watch(ConfigEventFabric, CONFIG_FILENAME.as_ref());
 
     let sec = config.read().await.sec.clone(); // avoiding deadlock
-    
-    if let Some(sec) = sec {
-        let certs_folder = root.join("certs");
-        let cert_path = if sec.tls.cert.is_absolute() {
-            sec.tls.cert.clone()
-        }
-        else {
-            certs_folder.join(&sec.tls.cert)
-        };
 
-        let cert_key_path = if sec.tls.key.is_absolute() {
-            sec.tls.key.clone()
-        }
-        else {
-            certs_folder.join(&sec.tls.key)
-        };
-
-        let cert = CertificateDer::pem_file_iter(cert_path)
-            .expect("unable to load certificate")
-            .collect::<Result<Vec<_>, _>>()
-            .expect("unable to parse cert");
-
-        let key = PrivateKeyDer::from_pem_file(cert_key_path).expect("unable to parse private key");
-
-        let tls_config = ServerConfig::builder().with_no_client_auth().with_single_cert(cert, key).unwrap();
-        let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
-
-        info!("TLS is enabled");
-
-        loop {
-            let (tcp_stream, _) = listener.accept().await.expect("failed to accept client");
-            let tls_acceptor = tls_acceptor.clone();
-
-            let bulldozer = bulldozer.clone();
-
-            tokio::task::spawn(async move {
-                let tls_stream = match tls_acceptor.accept(tcp_stream).await {
-                    Ok(tls_stream) => tls_stream,
-                    Err(err) => {
-                        error!("failed to perform tls handshake: {err:#}");
-                        return;
-                    }
-                };
-
-                if let Err(err) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                    .serve_connection(TokioIo::new(tls_stream), bulldozer)
-                    .await
-                {
-                    error!("error serving connection: {}", err);
-                }
-            });
-        }
-    }
-    else {
-        loop {
-            let (tcp_stream, _) = listener.accept().await.expect("failed to accept client");
-            let io = TokioIo::new(tcp_stream);
-
-            let bulldozer = bulldozer.clone();
-
-            tokio::task::spawn(async move {
-                if let Err(err) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                    .serve_connection(io, bulldozer)
-                    .await
-                {
-                    eprintln!("Error serving connection: {}", err);
-                }
-            });
-        }
-    }
+    Server::new(root, ctx)
+        .add_hook(|ctx| {
+            let path = ctx.request.uri().path();
+            if path != "/admin/login" && path.starts_with("/admin") && ctx.jwt.is_none() {
+                Some(make_see_other(&format!("/admin/login?next={path}")))
+            }
+            else {
+                None
+            }
+        })
+        .await
+        .load_pages()
+        .await
+        .load_public()
+        .await
+        .routes(|r| {
+            r.add(post("/admin/login"), api(login))
+                .add(get("/admin/logout"), api(logout))
+                .add(get("/health"), ResourceRefType::Content(Bytes::from("ok")))
+                .add(post("/api/posts"), api(create_post))
+                .add(delete("/api/posts"), api(delete_post))
+                .add(get("/api/posts"), api(get_posts))
+                .add(patch("/api/posts"), api(update_post))
+                .add(get("/components/js/{comp}"), api(get_component_js))
+                .add(get("/components"), api(get_components))
+                .add(get("/api/resources"), api(get_resources_in_folder))
+                .add(get("/admin/posts/new"), api(new_post));
+        })
+        .await
+        .set_security(sec)
+        .serve()
+        .await;
 }

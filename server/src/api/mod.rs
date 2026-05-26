@@ -1,13 +1,11 @@
-use crate::api::auth::{AuthContext, JwtPayload};
+use crate::{api::auth::JwtPayload, config::ArcConfig, resources::ResourceManager};
 use hyper::{Request, body::Incoming};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
-use crate::config::ArcConfig;
-use crate::resources::ResourceManager;
 
 pub mod auth;
-pub mod posts;
 pub mod components;
+pub mod posts;
 pub mod resources;
 
 pub struct ApiContext {

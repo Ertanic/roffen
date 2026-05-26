@@ -1,10 +1,7 @@
 use crate::{
-    ResourceRefType,
-    config::ArcConfig,
-    consts::{CONFIG_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, PUBLIC_FOLDER},
-    lang::LangManager,
-    resources::ResourceManager,
-    routing::{MethodRouter, get},
+    AppContext, ResourceRefType,
+    consts::{LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, PUBLIC_FOLDER},
+    routing::get,
     vfs::VfsPath,
 };
 use log::{debug, error, info, trace, warn};
@@ -16,17 +13,16 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::RwLock;
 
 type ArcFabric = Arc<dyn EventFabric + Send + Sync + 'static>;
 
-trait EventFabric {
+pub trait EventFabric {
     fn created(&self) -> ContentEventKind;
     fn modified(&self) -> ContentEventKind;
     fn removed(&self) -> ContentEventKind;
 }
 
-struct ConfigEventFabric;
+pub struct ConfigEventFabric;
 
 impl EventFabric for ConfigEventFabric {
     fn created(&self) -> ContentEventKind {
@@ -42,7 +38,7 @@ impl EventFabric for ConfigEventFabric {
     }
 }
 
-struct PublicEventFabric;
+pub struct PublicEventFabric;
 
 impl EventFabric for PublicEventFabric {
     fn created(&self) -> ContentEventKind {
@@ -58,7 +54,7 @@ impl EventFabric for PublicEventFabric {
     }
 }
 
-struct PagesEventFabric;
+pub struct PagesEventFabric;
 
 impl EventFabric for PagesEventFabric {
     fn created(&self) -> ContentEventKind {
@@ -74,7 +70,7 @@ impl EventFabric for PagesEventFabric {
     }
 }
 
-struct LangEventFabric;
+pub struct LangEventFabric;
 
 impl EventFabric for LangEventFabric {
     fn created(&self) -> ContentEventKind {
@@ -126,21 +122,66 @@ impl ContentEvent {
     }
 }
 
-#[derive(Clone)]
-pub struct InitWatcherContext {
-    pub router: Arc<RwLock<MethodRouter>>,
-    pub resources: Arc<RwLock<ResourceManager>>,
-    pub config: ArcConfig,
-    pub lang_manager: LangManager,
-}
-
 pub type FilesListener = crossbeam_channel::Receiver<notify::Result<Event>>;
+
+pub struct FilesWatcherBuilder(Arc<AppContext>, PathBuf);
+
+impl FilesWatcherBuilder {
+    pub fn watch<F>(&self, fabric: F, path: &Path) -> &Self
+    where
+        F: EventFabric + Send + Sync + 'static,
+    {
+        let path = &self.1.join(path);
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        let mut watcher = match notify::recommended_watcher(tx) {
+            Ok(w) => w,
+            Err(err) => {
+                error!(
+                    "failed to initialize files watcher in {} because {err}, changes to files will not be applied until the server is restarted",
+                    path.display()
+                );
+                return self;
+            }
+        };
+
+        match watcher.watch(path, RecursiveMode::Recursive) {
+            Ok(_) => {
+                info!("watcher initialized at {}", path.display());
+                let watcher = FilesWatcher {
+                    root: path.to_owned(),
+                    _watcher: Arc::new(watcher),
+                    listener: rx,
+                    fabric: Arc::new(fabric),
+                };
+
+                let ctx = Arc::clone(&self.0);
+
+                tokio::spawn(async move {
+                    watch_content(watcher, ctx).await;
+                });
+            }
+            Err(err) => {
+                error!("failed to initialize watcher on {} because {err}", path.display());
+            }
+        }
+
+        self
+    }
+}
 
 pub struct FilesWatcher {
     _watcher: Arc<dyn Watcher + Send + Sync>,
     listener: FilesListener,
     root: PathBuf,
     fabric: ArcFabric,
+}
+
+impl FilesWatcher {
+    pub fn init(ctx: Arc<AppContext>, root: PathBuf) -> FilesWatcherBuilder {
+        FilesWatcherBuilder(ctx, root)
+    }
 }
 
 impl Iterator for &mut FilesWatcher {
@@ -208,51 +249,7 @@ fn real_path_to_vfs(root: &Path, path: &Path) -> Option<VfsPath> {
     path.strip_prefix(root).map(|p| VfsPath::new(p.to_string_lossy().replace('\\', "/"))).ok()
 }
 
-pub fn init_watcher(content: &Path, context: InitWatcherContext) {
-    watch_folder(PagesEventFabric, &content.join(PAGES_FOLDER), context.clone());
-    watch_folder(PublicEventFabric, &content.join(PUBLIC_FOLDER), context.clone());
-    watch_folder(LangEventFabric, &content.join(LANG_FOLDER), context.clone());
-    watch_folder(ConfigEventFabric, &content.join(CONFIG_FILENAME), context);
-}
-
-fn watch_folder<F>(fabric: F, path: &Path, context: InitWatcherContext)
-where
-    F: EventFabric + Send + Sync + 'static,
-{
-    let (tx, rx) = crossbeam_channel::unbounded();
-
-    let mut watcher = match notify::recommended_watcher(tx) {
-        Ok(w) => w,
-        Err(err) => {
-            error!(
-                "failed to initialize files watcher in {} because {err}, changes to files will not be applied until the server is restarted",
-                path.display()
-            );
-            return;
-        }
-    };
-
-    match watcher.watch(path, RecursiveMode::Recursive) {
-        Ok(_) => {
-            info!("watcher initialized at {}", path.display());
-            let watcher = FilesWatcher {
-                root: path.to_owned(),
-                _watcher: Arc::new(watcher),
-                listener: rx,
-                fabric: Arc::new(fabric),
-            };
-
-            tokio::spawn(async move {
-                watch_content(watcher, context).await;
-            });
-        }
-        Err(err) => {
-            error!("failed to initialize watcher on {} because {err}", path.display());
-        }
-    }
-}
-
-async fn watch_content(mut watcher: FilesWatcher, context: InitWatcherContext) {
+async fn watch_content(mut watcher: FilesWatcher, context: Arc<AppContext>) {
     loop {
         for event in &mut watcher {
             if let ContentEvent::Change { path, kind } = event {
