@@ -19,17 +19,50 @@ hljs.highlightAll();
 
 const content = document.getElementById('content');
 
-content?.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(header => {
+type ContentTableItem = {
+    level: number;
+    header: HTMLElement;
+    li: HTMLLIElement;
+}
+
+let last: ContentTableItem | null = null;
+content?.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+    const header = h as HTMLElement;
+
     const id = header.textContent.replaceAll(' ', '-');
     header.id = id;
+
     const link = `#${id}`;
     const list = document.getElementById('contents-table-list');
     const li = document.createElement('li');
     const a = document.createElement('a');
+
     a.href = link;
     a.textContent = header.textContent;
     li.appendChild(a);
-    list?.appendChild(li);
+
+    if (!last) {
+        list?.appendChild(li);
+        const level = Number(header.tagName.replace('H', ''));
+        last = {level, header, li};
+        return;
+    }
+
+    const level = Number(header.tagName.replace('H', ''));
+
+    if (level > last.level) {
+        const ol = document.createElement('ol');
+        ol.appendChild(li);
+        last.li.appendChild(ol);
+        last = {level, header, li};
+        return;
+    } else if (level < last.level) {
+        last.li.parentElement?.parentElement?.appendChild(li);
+    } else {
+        last.li.parentElement?.appendChild(li);
+    }
+
+    last = {level, header, li};
 });
 
 mermaid.initialize({
