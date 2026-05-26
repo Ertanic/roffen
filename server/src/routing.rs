@@ -1,5 +1,5 @@
 use crate::{
-    AppContext, AuthContext, BoxStream, ResourceRefType, Response,
+    AppContext, AuthContext, BoxStream, Response,
     api::{ApiContext, auth::JwtPayload},
     config::ArcConfig,
     consts::AUTH_COOKIE_NAME,
@@ -31,6 +31,7 @@ use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
 use vfs::async_vfs::AsyncFileSystem;
+use crate::resources::ResourceRefType;
 
 pub type RequestHook = Box<dyn Fn(&HookContext) -> Option<Response> + Send + Sync + 'static>;
 

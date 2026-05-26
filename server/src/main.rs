@@ -39,6 +39,7 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
+use crate::resources::ResourceRefType;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -50,24 +51,6 @@ struct AppContext {
     pub vfs: VirtualFS,
     pub resources: Arc<RwLock<ResourceManager>>,
     pub lang_manager: LangManager,
-}
-
-enum ResourceRefType {
-    File(VfsPath),
-    Content(Bytes),
-    Page { index: VfsPath, layouts: Vec<PageLayout> },
-    Api(ApiCallback),
-}
-
-impl Debug for ResourceRefType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResourceRefType::File(path) => write!(f, "{:?}", path),
-            ResourceRefType::Content(content) => write!(f, "{}", String::from_utf8_lossy(content)),
-            ResourceRefType::Page { index, layouts } => write!(f, "path: {index:?}, layouts: {layouts:?}"),
-            ResourceRefType::Api(_) => write!(f, "api handler"),
-        }
-    }
 }
 
 #[tokio::main]

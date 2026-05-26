@@ -1,5 +1,5 @@
 use crate::{
-    PageLayout, ResourceRefType, Response,
+    ApiCallback, PageLayout, Response,
     api::{
         ApiContext,
         components::{Component, ComponentMeta},
@@ -23,13 +23,38 @@ use futures_util::{
     stream,
     stream::{BoxStream, StreamExt},
 };
+use hyper::body::Bytes;
 use log::{debug, error, info, trace, warn};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
+use std::{
+    collections::VecDeque,
+    env,
+    fmt::{Debug, Formatter},
+    path::PathBuf,
+    sync::Arc,
+};
 use tokio::sync::{Mutex, RwLock};
 use unic_langid::LanguageIdentifier;
 use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+
+pub enum ResourceRefType {
+    File(VfsPath),
+    Content(Bytes),
+    Page { index: VfsPath, layouts: Vec<PageLayout> },
+    Api(ApiCallback),
+}
+
+impl Debug for ResourceRefType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceRefType::File(path) => write!(f, "{:?}", path),
+            ResourceRefType::Content(content) => write!(f, "{}", String::from_utf8_lossy(content)),
+            ResourceRefType::Page { index, layouts } => write!(f, "path: {index:?}, layouts: {layouts:?}"),
+            ResourceRefType::Api(_) => write!(f, "api handler"),
+        }
+    }
+}
 
 pub trait BoxedApiCallback {
     fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static>;

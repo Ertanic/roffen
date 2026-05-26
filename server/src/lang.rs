@@ -39,10 +39,6 @@ impl LangManager {
         }))
     }
 
-    pub async fn get_message(&self, key: &str) -> String {
-        self.try_get_message(key).await.expect("message not found")
-    }
-
     pub async fn try_get_message(&self, key: &str) -> Option<String> {
         let bundle = self
             .0
