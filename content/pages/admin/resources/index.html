@@ -9,8 +9,8 @@
 <main class="content-center full">
     <div class="page-header">
         <div>
-            <h2 style="margin:0">Resources</h2>
-            <p class="muted" style="margin:0.25rem 0 0 0">List of all blog public resources in <a href="/admin/resources">/</a>
+            <h2 style="margin:0">{{ lang("admin-panel-resources-title") }}</h2>
+            <p class="muted" style="margin:0.25rem 0 0 0">{{ lang("admin-panel-resources-subtitle") }} <a href="/admin/resources">/</a>
                 {% with split_path((query?.path | default: "/")) as path_comps %}
                 {% if len(path_comps) %}
                 {% for path in path_comps %}
@@ -26,16 +26,16 @@
     <table class="posts-table">
         <thead>
         <tr>
-            <th>Link</th>
-            <th>Path</th>
-            <th>Type</th>
-            <th>Actions</th>
+            <th>{{ lang("admin-panel-resources-table-link") }}</th>
+            <th>{{ lang("admin-panel-resources-table-path") }}</th>
+            <th>{{ lang("admin-panel-resources-table-type") }}</th>
+            <th>{{ lang("admin-panel-resources-table-actions") }}</th>
         </tr>
         </thead>
         <tbody>
         <tr>
             {% if not len(resources) %}
-            <td colspan="4" class="muted" style="padding:2rem; text-align:center">No resources, upload one.</td>
+            <td colspan="4" class="muted" style="padding:2rem; text-align:center">{{ lang("admin-panel-resources-no-one") }}</td>
             {% else %}
             {% for resource in resources %}
             {% if resource.resource_type | eq: "file" %}
@@ -43,11 +43,11 @@
                 <td><a href="{{ resource.link }}">/{{ resource.name }}</a></td>
                 <td>{{ resource.path }}</td>
                 <td>
-                    <span class="badge published">File</span>
+                    <span class="badge published">{{ lang("admin-panel-resources-table-type-file") }}</span>
                 </td>
                 <td>
-                    <button class="btn btn-primary">Download</button>
-                    <button class="btn btn-danger">Delete</button>
+                    <button class="btn btn-primary">{{ lang("admin-panel-resources-table-actions-download") }}</button>
+                    <button class="btn btn-danger">{{ lang("admin-panel-resources-table-actions-delete") }}</button>
                 </td>
             </tr>
             {% else %}
@@ -55,10 +55,10 @@
                 <td><a href="/admin/resources?path={{ resource.link }}">/{{ resource.name }}/</a></td>
                 <td>{{ resource.path }}</td>
                 <td>
-                    <span class="badge draft">Folder</span>
+                    <span class="badge draft">{{ lang("admin-panel-resources-table-type-folder") }}</span>
                 </td>
                 <td>
-                    <button class="btn btn-danger">Delete</button>
+                    <button class="btn btn-danger">{{ lang("admin-panel-resources-table-actions-delete") }}</button>
                 </td>
             </tr>
             {% endif %}

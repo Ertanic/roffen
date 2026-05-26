@@ -1,0 +1,13 @@
+[lang]
+current = "en-US"
+
+[tls]
+cert = "server-cert.pem"
+key = "server-key.pem"
+
+[auth]
+secret = "super-secret-key-change-me"
+
+[[users]]
+login = "admin"
+password = "admin"

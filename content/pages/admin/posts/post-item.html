@@ -10,22 +10,22 @@
     <td class="muted">{{ post.created_at | date: "%d.%m.%Y" }}</td>
     <td>
         {% if post.draft %}
-        <span class="badge draft">draft</span>
+        <span class="badge draft">{{ lang("admin-panel-posts-tag-draft") }}</span>
         {% else %}
-        <span class="badge published">public</span>
+        <span class="badge published">{{ lang("admin-panel-posts-tag-published") }}</span>
         {% endif %}
     </td>
     <td style="text-align:right">
         <div class="actions">
-            <a class="btn" href="/admin/posts/edit?id={{ post.id }}">edit</a>
+            <a class="btn" href="/admin/posts/edit?id={{ post.id }}">{{ lang("admin-panel-posts-table-actions-edit") }}</a>
 
             {% if post.draft %}
-            <button class="btn outline" onclick="togglePostStatus('{{ post.id }}')">public</button>
+            <button class="btn outline" onclick="togglePostStatus('{{ post.id }}')">{{ lang("admin-panel-posts-table-actions-public") }}</button>
             {% else %}
-            <button class="btn outline" onclick="togglePostStatus('{{ post.id }}')">hide</button>
+            <button class="btn outline" onclick="togglePostStatus('{{ post.id }}')">{{ lang("admin-panel-posts-table-actions-hide") }}</button>
             {% endif %}
 
-            <button class="btn danger" onclick="deletePost('{{ post.id }}')">delete</button>
+            <button class="btn danger" onclick="deletePost('{{ post.id }}')">{{ lang("admin-panel-posts-table-actions-delete") }}</button>
         </div>
     </td>
 </tr>

@@ -1,0 +1,72 @@
+name: Release
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-26-intel, ubuntu-24.04-arm, windows-11-arm, macos-latest ]
+        include:
+          # x86
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+          - os: macos-26-intel
+            label: macos-intel
+
+          # arm64
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
+          - os: windows-11-arm
+            label: windows-arm64
+          - os: macos-latest
+            label: macos-arm64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          profile: minimal
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./target
+            ~/.cargo
+          key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Set project version
+        working-directory: server
+        run: |
+          cargo install cargo-edit
+          cargo set-version ${{ github.ref_name }}
+
+      - name: Build project
+        run: cargo build --release
+
+      - name: Rename artifact
+        run: mv target/release/server${{ case(contains(matrix.label, 'windows'), '.exe', '') }} target/release/roffen-${{ matrix.label }}${{ case(contains(matrix.label, 'windows'), '.exe', '') }}
+
+      - name: Create release
+        id: create-release
+        uses: softprops/action-gh-release@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: target/release/roffen-${{ matrix.label }}${{ case(contains(matrix.label, 'windows'), '.exe', '') }}

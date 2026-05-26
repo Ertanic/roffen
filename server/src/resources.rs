@@ -1,24 +1,77 @@
 use crate::{
-    PageLayout, ResourceRefType,
+    ApiCallback, PageLayout, Response,
     api::{
-        auth::AuthContext,
+        ApiContext,
         components::{Component, ComponentMeta},
         posts::{Post, PostBody},
         resources::{ResourceInfo, ResourceType},
     },
-    consts::{AUTH_FILENAME, COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, INDEX_FILENAME, PAGES_FOLDER, POSTS_FOLDER, PUBLIC_FOLDER, SEC_FILENAME},
+    config::Config,
+    consts::{
+        COMPS_FOLDER, COMPS_JS_FILE, COMPS_META_FILE, CONFIG_FILENAME, INDEX_FILENAME, LANG_FOLDER, LANG_META_FILE, PAGES_FOLDER, POSTS_FOLDER,
+        PUBLIC_FOLDER,
+    },
+    lang::{LangBundle, LangManager, LangMeta},
     routing::{MethodRouter, get},
     vfs::{PageDir, VfsPath, VirtualFS},
 };
+use dashmap::DashMap;
+use fluent::{FluentResource, concurrent::FluentBundle};
 use futures_util::{
-    AsyncReadExt, AsyncWriteExt, Stream, stream,
+    AsyncReadExt, AsyncWriteExt, Stream,
+    future::BoxFuture,
+    stream,
     stream::{BoxStream, StreamExt},
 };
-use log::{debug, error, trace, warn};
+use hyper::body::Bytes;
+use log::{debug, error, info, trace, warn};
 use ron::ser::PrettyConfig;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, env, path::PathBuf, sync::Arc};
+use std::{
+    collections::VecDeque,
+    env,
+    fmt::{Debug, Formatter},
+    path::PathBuf,
+    sync::Arc,
+};
+use tokio::sync::{Mutex, RwLock};
+use unic_langid::LanguageIdentifier;
 use vfs::{VfsFileType, VfsResult, async_vfs::AsyncFileSystem, error::VfsErrorKind};
+
+pub enum ResourceRefType {
+    File(VfsPath),
+    Content(Bytes),
+    Page { index: VfsPath, layouts: Vec<PageLayout> },
+    Api(ApiCallback),
+}
+
+impl Debug for ResourceRefType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceRefType::File(path) => write!(f, "{:?}", path),
+            ResourceRefType::Content(content) => write!(f, "{}", String::from_utf8_lossy(content)),
+            ResourceRefType::Page { index, layouts } => write!(f, "path: {index:?}, layouts: {layouts:?}"),
+            ResourceRefType::Api(_) => write!(f, "api handler"),
+        }
+    }
+}
+
+pub trait BoxedApiCallback {
+    fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static>;
+}
+
+impl<F> BoxedApiCallback for F
+where
+    F: Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static,
+{
+    fn boxed(self) -> Box<dyn Fn(ApiContext) -> BoxFuture<'static, Response> + Send + Sync + 'static> {
+        Box::new(self)
+    }
+}
+
+pub fn api(callback: impl BoxedApiCallback) -> ResourceRefType {
+    ResourceRefType::Api(callback.boxed())
+}
 
 #[derive(Serialize)]
 pub struct PageInfo {
@@ -32,13 +85,13 @@ pub enum GetPostsRequest {
     Chunk { count: usize, offset: usize },
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct TlsContext {
     pub cert: PathBuf,
     pub key: PathBuf,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct SecurityContext {
     pub tls: TlsContext,
 }
@@ -52,48 +105,29 @@ impl ResourceManager {
         Self { vfs }
     }
 
-    pub async fn load_auth(&self) -> AuthContext {
-        let mut buf = String::new();
-        let filepath = VfsPath::new(AUTH_FILENAME);
-
-        self.vfs
-            .open_file(&filepath)
-            .await
-            .expect("unable to open auth context")
-            .read_to_string(&mut buf)
-            .await
-            .expect("unable to read auth config file");
-
-        let auth = toml::from_str(&buf).expect("unable to parse auth config file");
-
-        debug!("auth context loaded");
-
-        auth
+    pub async fn load_config(&self) -> Config {
+        self.try_load_config().await.expect("load config failed")
     }
 
-    pub async fn load_security(&self) -> Option<SecurityContext> {
+    pub async fn try_load_config(&self) -> VfsResult<Config> {
+        let filepath = VfsPath::new(CONFIG_FILENAME);
         let mut buf = String::new();
-        let filepath = VfsPath::new(SEC_FILENAME);
 
-        if let Ok(mut file) = self.vfs.open_file(&filepath).await {
-            file.read_to_string(&mut buf).await.expect("unable to read sec config file");
-            let sec = toml::from_str(&buf).expect("unable to parse security config file");
-            debug!("security context loaded");
-            Some(sec)
-        }
-        else {
-            None
-        }
+        self.vfs.open_file(&filepath).await?.read_to_string(&mut buf).await?;
+
+        let config = toml::from_str(&buf).map_err(|e| VfsErrorKind::Other(e.to_string()))?;
+
+        info!("config {filepath} has been loaded");
+
+        Ok(config)
     }
 
-    pub async fn load_pages(&self, mut router: MethodRouter) -> MethodRouter {
+    pub async fn load_pages(&self, router: &mut MethodRouter) {
         let mut pages = vec![PageDir::new(VfsPath::new(PAGES_FOLDER))];
 
         while let Some(page) = pages.pop() {
-            self._load_page(&mut router, &mut pages, page).await
+            self._load_page(router, &mut pages, page).await
         }
-
-        router
     }
 
     async fn _load_page(&self, router: &mut MethodRouter, pages: &mut Vec<PageDir>, page: PageDir) {
@@ -155,7 +189,7 @@ impl ResourceManager {
 
         let normalized = normalize_route(&page.path.strip_prefix(VfsPath::new(PAGES_FOLDER)).unwrap());
 
-        match router.add(get(&normalized), resource) {
+        match router.try_add(get(&normalized), resource) {
             Ok(_) => {
                 debug!("page route {normalized} has been registered");
             }
@@ -179,7 +213,7 @@ impl ResourceManager {
         }
     }
 
-    pub async fn load_public(&self, mut router: MethodRouter) -> MethodRouter {
+    pub async fn load_public(&self, router: &mut MethodRouter) {
         let mut dirs = vec![VfsPath::new(PUBLIC_FOLDER)];
 
         while let Some(dir) = dirs.pop() {
@@ -208,7 +242,7 @@ impl ResourceManager {
                 else {
                     let normalized = normalize_route(&entry.strip_prefix(VfsPath::new(PUBLIC_FOLDER)).unwrap());
 
-                    match router.add(get(&normalized), ResourceRefType::File(VfsPath::new(entry))) {
+                    match router.try_add(get(&normalized), ResourceRefType::File(VfsPath::new(entry))) {
                         Ok(_) => {
                             debug!("route \"{normalized}\" has been registered");
                         }
@@ -219,8 +253,6 @@ impl ResourceManager {
                 }
             }
         }
-
-        router
     }
 
     async fn ensure_posts_folder(&self) -> VfsResult<VfsPath> {
@@ -440,10 +472,10 @@ impl ResourceManager {
                             let mut tags = Vec::with_capacity(1);
 
                             if normalized.starts_with(&VfsPath::new("admin")) {
-                                tags.push("system".to_owned());
+                                tags.push("admin-panel-pages-tag-system".to_owned());
                             }
                             else {
-                                tags.push("user".to_owned())
+                                tags.push("admin-panel-pages-tag-user".to_owned())
                             }
 
                             let link = normalized.as_string();
@@ -462,6 +494,128 @@ impl ResourceManager {
         .boxed();
 
         Ok(stream)
+    }
+
+    async fn ensure_lang_folder(&self) -> VfsResult<VfsPath> {
+        let folder = VfsPath::new(LANG_FOLDER);
+
+        if let Ok(exists) = self.vfs.exists(&folder).await
+            && !exists
+        {
+            self.vfs.create_dir(LANG_FOLDER).await?;
+        }
+
+        Ok(folder)
+    }
+
+    pub async fn load_lang_meta(&self, lang_folder: &VfsPath) -> VfsResult<LangMeta> {
+        let meta = lang_folder.join(LANG_META_FILE);
+        let mut meta_content = String::new();
+        self.vfs.open_file(&meta).await?.read_to_string(&mut meta_content).await?;
+        toml::from_str(&meta_content).map_err(|err| VfsErrorKind::Other(err.to_string()).into())
+    }
+
+    pub async fn load_lang(&self, lang_folder: &VfsPath) -> VfsResult<LangBundle> {
+        let lang_id = match lang_folder.filename().parse::<LanguageIdentifier>() {
+            Ok(lang_id) => lang_id,
+            Err(err) => {
+                error!("unable to parse language identifier {} because {err}", lang_folder.filename());
+                return Err(VfsErrorKind::Other(err.to_string()).into());
+            }
+        };
+
+        let stack = Arc::new(Mutex::new(vec![lang_folder.clone()]));
+        let bundle = Arc::new(RwLock::new(FluentBundle::new_concurrent(vec![lang_id])));
+
+        while let Some(path) = stack.lock().await.pop() {
+            match self.vfs.read_dir(&path).await {
+                Ok(reader) => reader.for_each(|e| {
+                    let bundle = bundle.clone();
+                    let stack = stack.clone();
+                    let path = path.clone();
+
+                    async move {
+                        let entry = path.join(e);
+
+                        if let Ok(meta) = self.vfs.metadata(&entry).await
+                            && matches!(meta.file_type, VfsFileType::Directory)
+                        {
+                            stack.lock().await.push(entry);
+                            return;
+                        }
+
+                        let mut content = String::new();
+                        let mut file = match self.vfs.open_file(&entry).await {
+                            Ok(file) => file,
+                            Err(err) => {
+                                error!("unable to open file {entry} because {err}");
+                                return;
+                            }
+                        };
+
+                        match file.read_to_string(&mut content).await {
+                            Ok(_) => {}
+                            Err(err) => {
+                                error!("unable to read file {entry} because {err}");
+                                return;
+                            }
+                        }
+
+                        let resource = match FluentResource::try_new(content) {
+                            Ok(resource) => resource,
+                            Err(err) => {
+                                error!("unable to parse resource {entry} because {:?}", err.1);
+                                return;
+                            }
+                        };
+
+                        match bundle.write().await.add_resource(resource) {
+                            Ok(_) => {}
+                            Err(err) => {
+                                error!("unable to add resource {entry} because {err:?}");
+                            }
+                        };
+                    }
+                }),
+                Err(err) => {
+                    error!("unable to read directory {path} because {err}");
+                    return Err(err);
+                }
+            }
+            .await;
+        }
+
+        Ok(bundle)
+    }
+
+    pub async fn load_langs(&self, default_lang: String, current_lang: String) -> VfsResult<LangManager> {
+        let folder = self.ensure_lang_folder().await?;
+        let meta = self.load_lang_meta(&folder).await?;
+
+        let map = self
+            .vfs
+            .read_dir(&folder)
+            .await?
+            .fold(DashMap::new(), |map, entry| async {
+                if entry == LANG_META_FILE {
+                    return map;
+                }
+
+                let bundle = match self.load_lang(&folder.join(VfsPath::new(&entry))).await {
+                    Ok(bundle) => bundle,
+                    Err(err) => {
+                        error!("unable to load language {entry} because {err}");
+                        return map;
+                    }
+                };
+
+                map.insert(entry, bundle);
+
+                map
+            })
+            .await;
+
+        Ok(LangManager::new(current_lang, default_lang, map, meta.lang))
     }
 
     pub async fn get_resources_in_folder(&self, folder: &str) -> VfsResult<BoxStream<'static, ResourceInfo>> {

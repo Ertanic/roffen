@@ -2,8 +2,7 @@ import queryString from "node:querystring";
 import type {IComponent} from "common/src/IComponent.ts";
 
 export type ComponentInfo = {
-    id: string;
-    path: string;
+    name: string;
     html: string;
     title: string;
     data: Record<string, any>;

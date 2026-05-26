@@ -1,5 +1,6 @@
 use crate::{
     api::{posts::Post, resources::ResourceInfo},
+    lang::LangManager,
     resources::{GetPostsRequest, ResourceManager},
 };
 use futures_util::{Stream, StreamExt};
@@ -9,7 +10,7 @@ use tokio::{runtime::Handle, sync::RwLock};
 use upon::{Engine, Value};
 use vfs::VfsResult;
 
-pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceManager>>) {
+pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceManager>>, lang_manager: LangManager) {
     trace!("registering templates functions...");
 
     engine.add_function("all_posts", {
@@ -178,6 +179,13 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
     engine.add_function("take", |vec: &[Value], count: usize| {
         let max = vec.len().min(count);
         Some(vec[..max].to_vec())
+    });
+
+    engine.add_function("lang", move |key: &str| {
+        tokio::task::block_in_place(|| {
+            let runtime = Handle::current();
+            runtime.block_on(async { lang_manager.try_get_message(key).await })
+        })
     });
 }
 

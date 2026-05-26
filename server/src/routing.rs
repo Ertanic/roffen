@@ -1,10 +1,12 @@
 use crate::{
-    AuthContext, BoxStream, ResourceRefType, Response,
+    AppContext, AuthContext, BoxStream, Response,
     api::{ApiContext, auth::JwtPayload},
+    config::ArcConfig,
     consts::AUTH_COOKIE_NAME,
+    lang::LangManager,
     resources::ResourceManager,
     templates::functions::register_functions,
-    utils::{make_internal_error, make_not_found, make_see_other},
+    utils::{make_internal_error, make_not_found},
     vfs::VirtualFS,
 };
 use cookie::Cookie;
@@ -18,7 +20,7 @@ use hyper::{
 };
 use jsonwebtoken::{DecodingKey, Validation};
 use log::{error, trace, warn};
-use matchit::{Match, Router};
+use matchit::{InsertError, Match, Router};
 use std::{
     collections::HashMap,
     pin::Pin,
@@ -29,6 +31,9 @@ use tokio_stream::StreamExt;
 use tokio_util::io::ReaderStream;
 use url_encoded_data::UrlEncodedData;
 use vfs::async_vfs::AsyncFileSystem;
+use crate::resources::ResourceRefType;
+
+pub type RequestHook = Box<dyn Fn(&HookContext) -> Option<Response> + Send + Sync + 'static>;
 
 pub fn get(path: &str) -> MethodRoute<'_> {
     MethodRoute::new(Method::GET, path)
@@ -67,14 +72,20 @@ pub struct MethodRouter {
 }
 
 impl MethodRouter {
-    pub fn add(&mut self, route: MethodRoute, resource: ResourceRefType) -> Result<(), matchit::InsertError> {
+    const INSERT_ERROR: &'static str = "failed to insert route";
+    pub fn add(&mut self, route: MethodRoute, resource: ResourceRefType) -> &mut Self {
+        self.try_add(route, resource).expect(Self::INSERT_ERROR);
+        self
+    }
+
+    pub fn try_add(&mut self, route: MethodRoute, resource: ResourceRefType) -> Result<(), InsertError> {
         match route.method {
             Method::GET => self.get.insert(route.path, resource),
             Method::POST => self.post.insert(route.path, resource),
             Method::DELETE => self.delete.insert(route.path, resource),
             Method::PATCH => self.patch.insert(route.path, resource),
-            _ => Err(matchit::InsertError::Conflict {
-                with: format!("no {} method router", route.method),
+            _ => Err(InsertError::Conflict {
+                with: format!("{} method not supported", route.method),
             }),
         }
     }
@@ -100,38 +111,50 @@ impl MethodRouter {
     }
 }
 
-#[derive(Clone)]
-pub struct SystemPath {
-    pub path: &'static str,
-    pub method: Method,
-    pub auth_required: bool,
-}
-
-pub struct BulldozerContext {
-    pub router: Arc<RwLock<MethodRouter>>,
-    pub auth: Arc<AuthContext>,
-    pub vfs: VirtualFS,
+pub struct HookContext {
+    pub request: Request<Incoming>,
+    pub config: ArcConfig,
     pub resources: Arc<RwLock<ResourceManager>>,
-    pub system_paths: Vec<SystemPath>,
+    pub jwt: Option<JwtPayload>,
 }
 
 pub struct Bulldozer {
     router: Arc<RwLock<MethodRouter>>,
-    auth: Arc<AuthContext>,
+    config: ArcConfig,
     vfs: VirtualFS,
     resources: Arc<RwLock<ResourceManager>>,
-    system_paths: Vec<SystemPath>,
+    hooks: Arc<RwLock<Vec<RequestHook>>>,
+    lang_manager: LangManager,
 }
 
 impl Bulldozer {
-    pub fn new(ctx: BulldozerContext) -> Self {
+    pub fn new(ctx: Arc<AppContext>) -> Self {
         Self {
-            router: ctx.router,
-            auth: ctx.auth,
-            vfs: ctx.vfs,
-            resources: ctx.resources,
-            system_paths: ctx.system_paths,
+            lang_manager: ctx.lang_manager.clone(),
+            router: ctx.router.clone().clone(),
+            config: ctx.config.clone(),
+            vfs: ctx.vfs.clone(),
+            resources: ctx.resources.clone(),
+            hooks: Default::default(),
         }
+    }
+
+    pub async fn routes(&self, builder: impl FnOnce(&mut MethodRouter)) {
+        builder(&mut *self.router.write().await);
+    }
+
+    pub async fn load_public(&self) {
+        self.resources.read().await.load_public(&mut *self.router.write().await).await
+    }
+
+    pub async fn load_pages(&self) {
+        self.resources.read().await.load_pages(&mut *self.router.write().await).await
+    }
+}
+
+impl Bulldozer {
+    pub async fn add_hook(&self, hook: RequestHook) {
+        self.hooks.write().await.push(hook);
     }
 }
 
@@ -147,10 +170,12 @@ impl Service<Request<Incoming>> for Bulldozer {
             req.uri().path_and_query().map(|a| a.as_str()).unwrap_or_else(|| req.uri().path())
         );
 
+        let hooks = Arc::clone(&self.hooks);
+        let lang_manager = self.lang_manager.clone();
         let resources = Arc::clone(&self.resources);
         let vfs = Arc::clone(&self.vfs);
         let router = Arc::clone(&self.router);
-        let auth_context = Arc::clone(&self.auth);
+        let config = Arc::clone(&self.config);
         let method = req.method().clone();
         let uri = req.uri();
         let path = uri.path().to_owned();
@@ -164,15 +189,13 @@ impl Service<Request<Incoming>> for Bulldozer {
             })
             .unwrap_or_default();
 
-        let system_paths = self.system_paths.clone();
-
         let result = async move {
             let path_clone = path.clone();
             let router = router.read().await;
             let result = router.at(MethodRoute::new(method.clone(), &path_clone));
 
             let headers = req.headers().clone();
-            let auth_ctx = Arc::clone(&auth_context);
+            let auth_ctx = config.read().await.auth.clone();
             let cookies = Arc::new(LazyLock::new(|| parse_cookies(headers)));
             let cookies_jwt = Arc::clone(&cookies);
             let auth = Arc::new(LazyLock::new(move || decode_jwt_from_cookies(&cookies_jwt, &auth_ctx)));
@@ -225,10 +248,16 @@ impl Service<Request<Incoming>> for Bulldozer {
                 ResourceRefType::Page { index, layouts } => {
                     trace!("found page resource ref: {index:?}");
 
-                    for sys_path in &system_paths {
-                        if sys_path.path == path && sys_path.method == method && (sys_path.auth_required && auth.is_none()) {
-                            trace!("found system path, redirecting to login page");
-                            return Ok(make_see_other(format!("/admin/login?next={path}").as_str()));
+                    let hook_ctx = HookContext {
+                        request: req,
+                        config: config.clone(),
+                        resources: resources.clone(),
+                        jwt: (**auth).clone(),
+                    };
+
+                    for hook in &*hooks.read().await {
+                        if let Some(result) = hook(&hook_ctx) {
+                            return Ok(result);
                         }
                     }
 
@@ -269,7 +298,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         move || (**auth).as_ref().map(|auth| upon::to_value(auth).unwrap())
                     });
 
-                    register_functions(&mut engine, resources);
+                    register_functions(&mut engine, resources, lang_manager);
 
                     let mut content = String::new();
                     let mut file = match vfs.open_file(index).await {
@@ -292,10 +321,7 @@ impl Service<Request<Incoming>> for Bulldozer {
                         }
                     };
 
-                    let params = result
-                        .params
-                        .iter()
-                        .collect::<HashMap<_, _>>();
+                    let params = result.params.iter().collect::<HashMap<_, _>>();
 
                     let rendered = match template
                         .render(
@@ -322,13 +348,13 @@ impl Service<Request<Incoming>> for Bulldozer {
                 ResourceRefType::Api(callback) => {
                     let cookies = (**cookies).clone();
                     let jwt = (**auth).clone();
-                    let params = result.params;
+                    let params = result.params.iter().map(|(k, v)| (k.to_owned(), v.to_owned())).collect::<HashMap<_, _>>();
                     let ctx = ApiContext {
                         params,
                         request: req,
                         query,
                         cookies,
-                        auth_context,
+                        config,
                         resources,
                         jwt,
                     };
