@@ -1,3 +1,17 @@
+#[cfg(debug_assertions)]
+pub const DEFAULT_ADDR: &str = "127.0.0.1";
+#[cfg(not(debug_assertions))]
+pub const DEFAULT_ADDR: &str = "0.0.0.0";
+
+#[cfg(debug_assertions)]
+pub const DEFAULT_HTTP_PORT: u16 = 8080;
+#[cfg(not(debug_assertions))]
+pub const DEFAULT_HTTP_PORT: u16 = 80;
+#[cfg(debug_assertions)]
+pub const DEFAULT_HTTPS_PORT: u16 = 8443;
+#[cfg(not(debug_assertions))]
+pub const DEFAULT_HTTPS_PORT: u16 = 443;
+
 pub const LOGS_FILENAME: &str = "server.log";
 pub const CONTENT_FOLDER: &str = "content";
 pub const CERTS_FOLDER: &str = "certs";

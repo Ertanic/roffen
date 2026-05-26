@@ -1,16 +1,12 @@
 use crate::{
     AppContext, Response,
-    consts::CERTS_FOLDER,
+    consts::{CERTS_FOLDER, DEFAULT_HTTP_PORT, DEFAULT_HTTPS_PORT},
     resources::SecurityContext,
     routing::{Bulldozer, HookContext, MethodRouter},
 };
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use log::{error, info};
-use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::net::TcpListener;
 use tokio_rustls::{
     TlsAcceptor,
@@ -24,14 +20,20 @@ pub type ArcBulldozer = Arc<Bulldozer>;
 
 pub struct Server {
     bulldozer: ArcBulldozer,
+    addr: String,
     sec: Option<SecurityContext>,
     root: PathBuf,
 }
 
 impl Server {
-    pub fn new(root: PathBuf, app_context: Arc<AppContext>) -> Self {
-        let bulldozer = Arc::new(Bulldozer::new(app_context));
-        Self { bulldozer, sec: None, root }
+    pub fn new(root: PathBuf, addr: String, app_context: Arc<AppContext>) -> Self {
+        let bulldozer = Arc::new(Bulldozer::new(Arc::clone(&app_context)));
+        Self {
+            bulldozer,
+            sec: None,
+            root,
+            addr,
+        }
     }
 
     pub async fn routes(&mut self, builder: impl FnOnce(&mut MethodRouter)) -> &mut Self {
@@ -60,10 +62,10 @@ impl Server {
     }
 
     pub async fn serve(&self) {
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8084);
-        let listener = TcpListener::bind(addr).await.expect("failed to bind");
+        let port = if self.sec.is_some() { DEFAULT_HTTPS_PORT } else { DEFAULT_HTTP_PORT };
+        let addr: SocketAddr = format!("{}:{port}", self.addr).parse().expect("invalid address");
 
-        info!("listening on {}", addr);
+        let listener = TcpListener::bind(addr).await.expect("failed to bind");
 
         if let Some(sec) = &self.sec {
             let certs_folder = self.root.join(CERTS_FOLDER);
@@ -92,6 +94,7 @@ impl Server {
             let tls_acceptor = TlsAcceptor::from(Arc::new(tls_config));
 
             info!("TLS is enabled");
+            info!("listening on https://{}", addr);
 
             loop {
                 let tcp_stream = match listener.accept().await {
@@ -124,6 +127,7 @@ impl Server {
             }
         }
         else {
+            info!("listening on http://{}", addr);
             loop {
                 let (tcp_stream, _) = listener.accept().await.expect("failed to accept client");
                 let io = TokioIo::new(tcp_stream);

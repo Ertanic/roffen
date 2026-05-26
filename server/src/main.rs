@@ -23,7 +23,7 @@ use crate::{
     consts::{CONFIG_FILENAME, CONTENT_FOLDER, LANG_FOLDER, PAGES_FOLDER, PUBLIC_FOLDER},
     lang::LangManager,
     logs::setup_logger,
-    resources::{ResourceManager, api, get_root},
+    resources::{ResourceManager, ResourceRefType, api, get_root},
     routing::{MethodRouter, delete, get, patch, post},
     server::Server,
     utils::make_see_other,
@@ -39,7 +39,6 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use crate::resources::ResourceRefType;
 
 type BoxStream = stream::BoxStream<'static, Result<Frame<Bytes>, std::io::Error>>;
 type Response = hyper::Response<StreamBody<BoxStream>>;
@@ -90,8 +89,9 @@ async fn main() {
         .watch(ConfigEventFabric, CONFIG_FILENAME.as_ref());
 
     let sec = config.read().await.sec.clone(); // avoiding deadlock
+    let addr = config.read().await.server.host.clone();
 
-    Server::new(root, ctx)
+    Server::new(root, addr, ctx)
         .add_hook(|ctx| {
             let path = ctx.request.uri().path();
             if path != "/admin/login" && path.starts_with("/admin") && ctx.jwt.is_none() {
