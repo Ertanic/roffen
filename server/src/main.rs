@@ -90,8 +90,9 @@ async fn main() {
 
     let sec = config.read().await.sec.clone(); // avoiding deadlock
     let addr = config.read().await.server.host.clone();
+    let port = config.read().await.server.port;
 
-    Server::new(root, addr, ctx)
+    Server::new(root, addr, port, ctx)
         .add_hook(|ctx| {
             let path = ctx.request.uri().path();
             if path != "/admin/login" && path.starts_with("/admin") && ctx.jwt.is_none() {

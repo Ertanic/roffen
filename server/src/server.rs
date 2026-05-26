@@ -21,18 +21,20 @@ pub type ArcBulldozer = Arc<Bulldozer>;
 pub struct Server {
     bulldozer: ArcBulldozer,
     addr: String,
+    port: Option<u16>,
     sec: Option<SecurityContext>,
     root: PathBuf,
 }
 
 impl Server {
-    pub fn new(root: PathBuf, addr: String, app_context: Arc<AppContext>) -> Self {
+    pub fn new(root: PathBuf, addr: String, port: Option<u16>, app_context: Arc<AppContext>) -> Self {
         let bulldozer = Arc::new(Bulldozer::new(Arc::clone(&app_context)));
         Self {
             bulldozer,
             sec: None,
             root,
             addr,
+            port,
         }
     }
 
@@ -62,7 +64,9 @@ impl Server {
     }
 
     pub async fn serve(&self) {
-        let port = if self.sec.is_some() { DEFAULT_HTTPS_PORT } else { DEFAULT_HTTP_PORT };
+        let port = self
+            .port
+            .unwrap_or(if self.sec.is_some() { DEFAULT_HTTPS_PORT } else { DEFAULT_HTTP_PORT });
         let addr: SocketAddr = format!("{}:{port}", self.addr).parse().expect("invalid address");
 
         let listener = TcpListener::bind(addr).await.expect("failed to bind");

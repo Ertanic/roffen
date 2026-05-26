@@ -5,9 +5,23 @@ main-page-about-paragraph-2 = It means that you can easily create or modify an e
 main-page-about-paragraph-3 = Alternatively, you can use the interactive article editor in the <a href="/admin/posts">admin panel</a>.
 main-page-about-paragraph-4 = The pages editor is in development. You can follow the development process in the <a href="https://github.com/Ertanic/roffen">repository</a>.
 main-page-plans = Another plans
-main-page-plan-1 = translating
 main-page-plan-2 = adding more components
 main-page-plan-3 = adding themes support
+
+main-page-config = Config
+main-page-config-auth = Auth
+main-page-config-tls = TLS
+main-page-config-server = Server
+main-page-config-lang = Lang
+main-page-config-default = Default
+
+main-page-config-paragraph-1 = The config file is a <code>config.toml</code> file that is located in the root of content folder. This file also has a hot reload feature, which allows you to change some parameters on the fly.
+main-page-config-paragraph-2 = If you plan to change the values to non-standard ones, the config must contain the following. Otherwise, you won't be able to access the admin panel.
+main-page-config-paragraph-3 = If you plan to run the server over HTTPS, you should specify the path to the server certificates. Both relative and absolute paths are accepted.
+main-page-config-paragraph-4 = By default, the server listens on the <code>0.0.0.0</code> address. The port depends on the use of HTTPS: if the paths to the certificates are specified, port <code>443</code> is used; otherwise, port <code>80</code> is used. To specify a different address or port, you can use the following values in the config.
+main-page-config-paragraph-5 = Some parts of the interface also have localization support. To enable it, you can specify the following:
+main-page-config-paragraph-6 = There is also a fallback language setting that the system will use if no translation key is found in the current language.
+main-page-config-paragraph-7 = By default, the config looks like this. You can copy it from here if you only need to change a few values.
 
 main-page-pages = Pages
 main-page-pages-paragraph-1 = Since the page editor is still under development, you will have to create pages manually.

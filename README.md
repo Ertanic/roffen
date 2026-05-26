@@ -12,9 +12,90 @@ the [repository](https://github.com/Ertanic/roffen).
 
 ## Another plans
 
-* translating
 * adding more components
 * adding themes support
+
+---
+
+# Config
+
+The config file is a `config.toml` file that is located in the root of content folder. This file also has a hot reload
+feature, which allows you to change some parameters on the fly.
+
+## Auth
+
+If you plan to change the values to non-standard ones, the config must contain the following. Otherwise, you won't be
+able to access the admin panel.
+
+```toml
+[auth]
+secret = "super-secret-key-change-me"
+
+[[users]]
+login = "admin"
+password = "admin"
+```
+
+## TLS
+
+If you plan to run the server over HTTPS, you should specify the path to the server certificates. Both relative and
+absolute paths are accepted.
+
+```toml
+[tls]
+cert = "server-cert.pem"
+key = "server-key.pem"
+```
+
+## Server
+
+By default, the server listens on the 0.0.0.0 address. The port depends on the use of HTTPS: if the paths to the
+certificates are specified, port 443 is used; otherwise, port 80 is used. To specify a different address or port, you
+can use the following values in the config.
+
+```toml
+[server]
+address = "0.0.0.0"
+port = 8443
+```
+
+## Lang
+
+Some parts of the interface also have localization support. To enable it, you can specify the following:
+
+```toml
+[lang]
+current = "en-US"
+```
+
+There is also a fallback language setting that the system will use if no translation key is found in the current
+language.
+
+```toml
+[lang]
+current = "ru-RU"
+default = "en-US"
+```
+
+## Default
+
+By default, the config looks like this. You can copy it from here if you only need to change a few values.
+
+```toml
+[lang]
+current = "en-US"
+
+[tls]
+cert = "server-cert.pem"
+key = "server-key.pem"
+
+[auth]
+secret = "super-secret-key-change-me"
+
+[[users]]
+login = "admin"
+password = "admin"
+```
 
 ---
 
@@ -62,7 +143,8 @@ In addition to functions, the following values are passed to templates:
 * `query: Map<string, string>` - query parameters.
 
 > If you don't have any functions or values in the template engine, you can always manually add them. See
-> this [file](https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs)
+>
+this [file](https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs)
 > and the project [build](#build) method.
 
 Let's now look at the fields of structures that are returned from functions and constants.

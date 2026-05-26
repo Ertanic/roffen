@@ -30,10 +30,73 @@
 
                 <h2>{{ lang("main-page-plans") }}</h2>
                 <ul>
-                    <li>{{ lang("main-page-plan-1") }}</li>
                     <li>{{ lang("main-page-plan-2") }}</li>
                     <li>{{ lang("main-page-plan-3") }}</li>
                 </ul>
+            </article>
+
+            <article>
+                <h1>{{ lang("main-page-config") }}</h1>
+                <p>{{ lang("main-page-config-paragraph-1") }}</p>
+
+                <h2>{{ lang("main-page-config-auth") }}</h2>
+                <p>{{ lang("main-page-config-auth-paragraph-2") }}</p>
+                <pre><code class="language-toml">
+[auth]
+secret = "super-secret-key-change-me"
+
+[[users]]
+login = "admin"
+password = "admin"
+                </code></pre>
+
+                <h2>{{ lang("main-page-config-tls") }}</h2>
+                <p>{{ lang("main-page-config-paragraph-3") }}</p>
+                <pre><code class="language-toml">
+[tls]
+cert = "server-cert.pem"
+key = "server-key.pem"
+                </code></pre>
+
+                <h2>{{ lang("main-page-config-server") }}</h2>
+                <p>{{ lang("main-page-config-paragraph-4") }}</p>
+                <pre><code class="language-toml">
+[server]
+address = "0.0.0.0"
+port = 8443
+                </code></pre>
+
+                <h2>{{ lang("main-page-config-lang") }}</h2>
+                <p>{{ lang("main-page-config-paragraph-5") }}</p>
+                <pre><code class="language-toml">
+[lang]
+current = "en-US"
+                </code></pre>
+
+                <p>{{ lang("main-page-config-paragraph-6") }}</p>
+                <pre><code class="language-toml">
+[lang]
+current = "ru-RU"
+default = "en-US"
+                </code></pre>
+
+                <h2>{{ lang("main-page-config-default") }}</h2>
+                <p>{{ lang("main-page-config-paragraph-7") }}</p>
+                <pre><code class="language-toml">
+[lang]
+current = "en-US"
+
+[tls]
+cert = "server-cert.pem"
+key = "server-key.pem"
+
+[auth]
+secret = "super-secret-key-change-me"
+
+[[users]]
+login = "admin"
+password = "admin"
+                </code></pre>
             </article>
 
             <article>
@@ -57,12 +120,14 @@
                 <ul>
                     <li><code>is_map(val) -> bool</code> - {{ lang("main-page-template-function-1") }}</li>
                     <li><code>len(val) -> i64</code> - {{ lang("main-page-template-function-2") }}</li>
-                    <li><code>date(timestamp, format) -> string</code> - {{ lang("main-page-template-function-3") }}</li>
+                    <li><code>date(timestamp, format) -> string</code> - {{ lang("main-page-template-function-3") }}
+                    </li>
                     <li><code>eq(left, right) -> bool</code> - {{ lang("main-page-template-function-4") }}</li>
                     <li><code>and(first, second) -> bool</code> - {{ lang("main-page-template-function-5") }}</li>
                     <li><code>default
                         <T>(val, default) -> T
-                    </code> - {{ lang("main-page-template-function-6") }}</li>
+                    </code> - {{ lang("main-page-template-function-6") }}
+                    </li>
                     <li><code>all_posts() -> Post[]</code> - {{ lang("main-page-template-function-7") }}</li>
                     <li><code>posts(count, offset) -> Post[]</code> - {{ lang("main-page-template-function-8") }}</li>
                     <li><code>get_post_by_id(id) -> Post</code> - {{ lang("main-page-template-function-9") }}</li>

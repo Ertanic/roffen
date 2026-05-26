@@ -4,6 +4,7 @@ import rust from 'highlight.js/lib/languages/rust';
 import typescript from 'highlight.js/lib/languages/typescript';
 import markdown from 'highlight.js/lib/languages/markdown';
 import powershell from 'highlight.js/lib/languages/powershell';
+import toml from 'highlight.js/lib/languages/ini';
 import handlebars from 'highlight.js/lib/languages/handlebars';
 import mermaid from 'mermaid';
 
@@ -12,6 +13,7 @@ hljs.registerLanguage('typescript', typescript);
 hljs.registerLanguage('html', markdown);
 hljs.registerLanguage('handlebars', handlebars);
 hljs.registerLanguage('powershell', powershell);
+hljs.registerLanguage('toml', toml);
 
 hljs.highlightAll();
 
