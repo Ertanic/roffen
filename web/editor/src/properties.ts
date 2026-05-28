@@ -88,8 +88,10 @@ export function initProperties(block: HTMLDivElement, comp: Component | null = n
             propertiesBody,
             "Height (rows)",
             block.dataset.row ?? "1",
-            String(1), "",
+            "1", "",
             value => {
+                block.dataset.row = value;
+                block.style.gridRow = `span ${value}`;
             }
         );
     });
