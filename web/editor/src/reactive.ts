@@ -25,7 +25,8 @@ export function initProps(props: ComponentProperty[], state: ReactiveState, bloc
 }
 
 export function initReactiveHTML(html: ComponentHtml, state: ReactiveState, block: HTMLDivElement) {
-    if (!block.firstChild) {
+    if (!block.firstElementChild) {
+        console.warn("no children in ", block);
         return;
     }
 
@@ -36,9 +37,11 @@ export function initReactiveHTML(html: ComponentHtml, state: ReactiveState, bloc
     walk(html, ref, state)
 }
 
-export function initTagBinding(html: ComponentHtml, ref: Ref, state: ReactiveState, binding: Binding | null) {
+export function initTagBinding(html: ComponentHtml, ref: Ref, state: ReactiveState, binding: Binding) {
     for (const prop of binding?.properties ?? []) {
         state[prop]?.subscribe(_ => {
+            console.log("prop: ", prop, state[prop]);
+
             const old = ref.current;
 
             const newEl = document.createElement(parseBinding(html.element, state).content);
@@ -81,7 +84,6 @@ export function initAttributeBindings(html: ComponentHtml, ref: Ref, state: Reac
 export function initChildrenBindings(html: ComponentHtmlChild, ref: Ref, state: ReactiveState) {
     console.log("child: ", html, ref.current)
     if (ref.current instanceof HTMLElement && html.type === "html") {
-        console.log("walk: ", html.content)
         walk(html.content, ref, state);
     } else if (html.type === "content") {
         const bindings = parseBinding(html.content, state);
@@ -96,14 +98,11 @@ function walk(
     ref: Ref,
     state: ReactiveState
 ) {
-    const old = ref.current;
-
-    initTagBinding(html, ref, state, null);
+    initTagBinding(html, ref, state, parseBinding(html.element, state));
     initAttributeBindings(html, ref, state);
 
     html.children.forEach((child, i) => {
-        ref.current = ref.current.childNodes[i]! as HTMLElement;
-        initChildrenBindings(child, ref, state);
-        ref.current = old;
+        const childRef = {current: ref.current.childNodes[i]! as HTMLElement};
+        initChildrenBindings(child, childRef, state);
     });
 }
