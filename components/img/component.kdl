@@ -1,6 +1,11 @@
 component "Image" {
     lang-key "components-image"
 
+    container {
+        row "8"
+        classes "component-image-center-container"
+    }
+
     property "url" {
         lang-key "components-image-property-url"
         default "/editor/img/image-placeholder.png"

@@ -97,13 +97,28 @@ export function initDrag() {
                 return;
             }
 
+            if (comp.container && comp.container.classes) {
+                block.classList.add(...comp.container.classes.split(" ").map(c => c.trim()));
+            }
+
             const {html, state} = renderHTML(comp.html, comp.properties);
             block.appendChild(html);
 
-            block.style.gridColumn = "span 12";
 
-            block.dataset.col = "12";
-            block.dataset.row = "1";
+            if (comp.container && comp.container.col) {
+                block.style.gridColumn = "span " + comp.container.col;
+                block.dataset.col = comp.container.col;
+            } else {
+                block.style.gridColumn = "span 12";
+                block.dataset.col = "12";
+            }
+
+            if (comp.container && comp.container.row) {
+                block.style.gridRow = "span " + comp.container.row;
+                block.dataset.row = comp.container.row;
+            } else {
+                block.dataset.row = "1";
+            }
 
             initBlockDrag(block);
             initProperties(block, comp, state);

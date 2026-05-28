@@ -8,6 +8,7 @@ use knus::Decode;
 use log::error;
 use macros::callback;
 use serde::Serialize;
+use serde_with::skip_serializing_none;
 use std::str::FromStr;
 use tokio_stream::StreamExt;
 
@@ -26,6 +27,7 @@ pub enum HtmlType {
     Html(Html),
 }
 
+#[skip_serializing_none]
 #[derive(Decode, Serialize, Default)]
 pub struct Html {
     #[knus(argument)]
@@ -57,6 +59,7 @@ impl FromStr for ComponentPropertyType {
     }
 }
 
+#[skip_serializing_none]
 #[derive(Decode, Serialize, Default)]
 pub struct ComponentProperty {
     #[knus(argument)]
@@ -73,6 +76,18 @@ pub struct ComponentProperty {
     pub type_name: Option<ComponentPropertyType>,
 }
 
+#[skip_serializing_none]
+#[derive(Decode, Serialize, Default)]
+pub struct ComponentContainerProperties {
+    #[knus(child, unwrap(argument))]
+    pub row: Option<String>,
+    #[knus(child, unwrap(argument))]
+    pub col: Option<String>,
+    #[knus(child, unwrap(argument))]
+    pub classes: Option<String>,
+}
+
+#[skip_serializing_none]
 #[derive(Decode, Serialize, Default)]
 pub struct Component {
     #[knus(argument)]
@@ -81,6 +96,8 @@ pub struct Component {
     pub lang_key: String,
     #[knus(child)]
     pub html: Html,
+    #[knus(child)]
+    pub container: Option<ComponentContainerProperties>,
     #[knus(children(name = "property"))]
     pub properties: Vec<ComponentProperty>,
 }
@@ -95,6 +112,7 @@ pub struct Document {
 pub struct ComponentProperties {
     pub name: String,
     pub properties: Vec<ComponentProperty>,
+    pub container: Option<ComponentContainerProperties>,
     pub html: Html,
 }
 
@@ -134,6 +152,7 @@ pub fn get_components(ctx: ApiContext) -> BoxFuture<'static, Response> {
                 .map(|c| ComponentProperties {
                     name: c.name,
                     html: c.html,
+                    container: c.container,
                     properties: c.properties,
                 })
                 .collect::<Vec<_>>()

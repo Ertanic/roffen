@@ -271,3 +271,10 @@ textarea {
     opacity: 1;
     transform: translateY(0);
 }
+
+/* ===== Component Container ===== */
+.component-image-center-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}

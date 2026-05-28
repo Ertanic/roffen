@@ -28,8 +28,15 @@ export type ComponentHtml = {
     children?: ComponentHtmlChild[];
 };
 
+export type ComponentContainerProperties = {
+    row?: string;
+    col?: string;
+    classes?: string;
+}
+
 export type Component = {
     name: string;
     html: ComponentHtml;
+    container?: ComponentContainerProperties;
     properties: ComponentProperty[];
 };
