@@ -5,7 +5,7 @@ PostBody(
     title: "Super-puper-post",
     content: [
         PostComponent(
-            name: "quote",
+            name: "Quote",
             data: {
                 "content": "Lupus pilum mutat, non\u{a0}mentem.",
                 "row": "1",
@@ -13,7 +13,7 @@ PostBody(
             },
         ),
         PostComponent(
-            name: "image",
+            name: "Image",
             data: {
                 "source": "https://127.0.0.1:8084/examples/wolf.png",
                 "row": "4",

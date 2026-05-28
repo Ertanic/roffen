@@ -5,7 +5,7 @@ PostBody(
     title: "Hello, World!",
     content: [
         PostComponent(
-            name: "image",
+            name: "Image",
             data: {
                 "row": "7",
                 "col": "12",

@@ -1,0 +1,14 @@
+component "Text" {
+    lang-key "components-text"
+
+    property "content" {
+        lang-key "components-text-property-content"
+    }
+
+    html "p" {
+        attr "class" "component-text"
+        children {
+            content "#content"
+        }
+    }
+}

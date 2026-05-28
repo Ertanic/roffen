@@ -1,27 +1,31 @@
 use std::path::{Path, PathBuf};
 
+const COMPONENT_FILE: &str = "component.kdl";
+
 fn main() {
     let project = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).parent().unwrap().to_owned();
+    let components_folder = project.join("components");
     let web_folder = project.join("web");
     let content_folder = project.join("content");
+    let components_out = content_folder.join("components");
 
     println!("cargo:rerun-if-changed={}/*", web_folder.display());
+    println!("cargo:rerun-if-changed={}/*", components_folder.display());
+
+    for entry in std::fs::read_dir(&components_folder).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_name() == "lib" {
+            continue;
+        }
+        process_component(&entry.path(), &components_out.join(entry.file_name()));
+    }
 
     let release = !cfg!(debug_assertions);
 
     for entry in std::fs::read_dir(web_folder).unwrap() {
         let entry = entry.unwrap();
-        if entry.file_name() == "components" {
-            let components_out = content_folder.join("components");
-            for entry in std::fs::read_dir(entry.path()).unwrap() {
-                let entry = entry.unwrap();
-                build_ts(release, false, &entry.path(), &components_out.join(entry.file_name()), &[]);
-            }
-            continue;
-        }
-
         let outdir = content_folder.join("public").join(entry.file_name());
-        build_ts(release, true, &entry.path(), &outdir, &["common"]);
+        build_ts(release, true, &entry.path(), &outdir, &["common", "components"]);
     }
 }
 
@@ -71,4 +75,16 @@ fn build_ts(release: bool, subdir: bool, path: &Path, out_path: &Path, exclude: 
         let dest_file = out_path.join("meta.ron");
         std::fs::copy(&meta_file, &dest_file).unwrap();
     }
+}
+
+fn process_component(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+
+    let component = from.join(COMPONENT_FILE);
+    if !component.exists() {
+        println!("cargo:warning=component.kdl not found in {}", from.display());
+        return;
+    }
+
+    std::fs::copy(component, to.join(COMPONENT_FILE)).expect("failed to copy component file");
 }

@@ -2,7 +2,7 @@ use crate::{
     ApiCallback, PageLayout, Response,
     api::{
         ApiContext,
-        components::{Component, ComponentMeta},
+        components::{Component, Document},
         posts::{Post, PostBody},
         resources::{ResourceInfo, ResourceType},
     },
@@ -367,20 +367,11 @@ impl ResourceManager {
                 let vfs = Arc::clone(&exists_vfs);
                 async move {
                     let meta_file = f.join(COMPS_META_FILE);
-                    let js_file = f.join(COMPS_JS_FILE);
 
                     if let Ok(meta_exists) = vfs.exists(&meta_file).await
                         && meta_exists
                     {
-                        if let Ok(js_exists) = vfs.exists(&meta_file).await
-                            && js_exists
-                        {
-                            Some((meta_file, js_file))
-                        }
-                        else {
-                            warn!("no {COMPS_JS_FILE} in component folder {f}");
-                            None
-                        }
+                        Some(meta_file)
                     }
                     else {
                         warn!("no meta in component folder {f}");
@@ -388,11 +379,11 @@ impl ResourceManager {
                     }
                 }
             })
-            .filter_map(move |(meta_path, js_path)| {
+            .filter_map(move |meta_path| {
                 let vfs = Arc::clone(&read_vfs);
                 async move {
-                    match read_component_meta(vfs, &meta_path).await {
-                        Ok(meta) => Some(Component { js: js_path, meta }),
+                    match read_component(vfs, &meta_path).await {
+                        Ok(component) => Some(component.component),
                         Err(err) => {
                             warn!("unable to read component metadata because {err}");
                             None
@@ -402,15 +393,6 @@ impl ResourceManager {
             });
 
         Ok(Box::pin(components))
-    }
-
-    pub async fn load_component_js(&self, component: &Component) -> VfsResult<String> {
-        let mut buf = String::new();
-        let mut file = self.vfs.open_file(&component.js).await?;
-
-        file.read_to_string(&mut buf).await?;
-
-        Ok(buf)
     }
 
     pub async fn get_pages(&self) -> VfsResult<BoxStream<'static, PageInfo>> {
@@ -661,18 +643,18 @@ impl ResourceManager {
     }
 }
 
-async fn read_component_meta(vfs: VirtualFS, meta: &str) -> VfsResult<ComponentMeta> {
+async fn read_component(vfs: VirtualFS, meta: &str) -> VfsResult<Document> {
     let mut buf = String::new();
     let mut file = vfs.open_file(meta).await?;
 
     file.read_to_string(&mut buf).await?;
 
-    let meta = match ron::from_str(&buf) {
+    let component = match knus::parse("component.kdl", &buf) {
         Ok(meta) => meta,
         Err(err) => return Err(VfsErrorKind::Other(format!("{err}")).into()),
     };
 
-    Ok(meta)
+    Ok(component)
 }
 
 async fn read_post(vfs: VirtualFS, filename: &str) -> VfsResult<Post> {

@@ -1,8 +1,9 @@
-import {componentsRegistry, propertiesBody} from "./common.ts";
-import {ComponentInitPropsContext} from "./component-contexts.ts";
-import type {IComponent} from "common/src/IComponent.ts";
+import {componentsCache, propertiesBody} from "./common.ts";
+import type {Component} from "common/src/Component.ts";
+import {markDirty} from "./save-content.ts";
+import {defaultReactiveState, initProps, initReactiveHTML, type ReactiveState} from "./reactive.ts";
 
-export function initProperties(block: HTMLDivElement, comp: IComponent | null = null) {
+export function initProperties(block: HTMLDivElement, comp: Component | null = null, state: ReactiveState | null) {
     block.addEventListener("click", () => {
         document.querySelectorAll(".grid-block.selected")
             .forEach(el => el.classList.remove("selected"));
@@ -23,7 +24,7 @@ export function initProperties(block: HTMLDivElement, comp: IComponent | null = 
                 return;
             }
 
-            const component = componentsRegistry.get(type);
+            const component = componentsCache.get(type);
             if (!component) {
                 console.error("no component found for type: " + block.dataset.type);
                 return;
@@ -31,14 +32,48 @@ export function initProperties(block: HTMLDivElement, comp: IComponent | null = 
             comp = component;
         }
 
-        const ctx = new ComponentInitPropsContext(block, comp.data, propertiesBody as HTMLDivElement);
+        if (!state) {
+            state = initProps(comp.properties, defaultReactiveState(), block);
+            initReactiveHTML(comp.html, state, block);
+        }
 
-        if (comp.hooks.initProps) {
-            comp.hooks.initProps(ctx);
+        console.log("state: ", state);
+
+        for (const prop of comp.properties) {
+            switch (prop.type_name) {
+                case "Number":
+                    createNumber(
+                        propertiesBody,
+                        prop.name,
+                        block.dataset[prop.name] ?? prop.default ?? "0",
+                        prop.min,
+                        prop.max,
+                        value => {
+                            state![prop.name]?.next(value);
+                            block.dataset[prop.name] = value;
+                            markDirty();
+                        }
+                    )
+                    break;
+                case null:
+                case "String":
+                    createText(
+                        propertiesBody,
+                        prop.name,
+                        block.dataset[prop.name] ?? prop.default ?? "",
+                        value => {
+                            state![prop.name]?.next(value);
+                            block.dataset[prop.name] = value;
+                            markDirty();
+                        }
+                    )
+                    break;
+            }
         }
 
         /* GRID WIDTH */
-        ctx.createNumber(
+        createNumber(
+            propertiesBody,
             "Width (columns)",
             block.dataset.col ?? "12",
             "1", "12",
@@ -49,11 +84,54 @@ export function initProperties(block: HTMLDivElement, comp: IComponent | null = 
         );
 
         /* GRID HEIGHT */
-        ctx.createNumber(
+        createNumber(
+            propertiesBody,
             "Height (rows)",
             block.dataset.row ?? "1",
             String(1), "",
-            value => ctx.applyRows(Number(value))
+            value => {
+            }
         );
     });
+}
+
+function createText(panel: HTMLElement, label: string, defaultVal: string, onChange: (value: string) => void) {
+    const wrap = document.createElement("div");
+    wrap.className = "property";
+
+    const l = document.createElement("label");
+    l.textContent = label;
+
+    const ta = document.createElement("textarea");
+    ta.value = defaultVal;
+
+    ta.addEventListener("input", e => {
+        onChange((e.currentTarget as HTMLTextAreaElement).value);
+        markDirty();
+    });
+
+    wrap.append(l, ta);
+    panel.appendChild(wrap);
+}
+
+function createNumber(panel: HTMLElement, label: string, defaultVal: string | undefined, min: string | undefined, max: string | undefined, onChange: (value: string) => void) {
+    const wrap = document.createElement("div");
+    wrap.className = "property";
+
+    const l = document.createElement("label");
+    l.textContent = label;
+
+    const ta = document.createElement("input");
+    ta.type = "number";
+    ta.min = min ?? "";
+    ta.max = max ?? "";
+    ta.value = defaultVal ?? "0";
+
+    ta.addEventListener("input", e => {
+        onChange((e.currentTarget as HTMLTextAreaElement).value);
+        markDirty();
+    });
+
+    wrap.append(l, ta);
+    panel.appendChild(wrap);
 }

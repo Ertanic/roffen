@@ -2,43 +2,100 @@ use crate::{
     Response,
     api::ApiContext,
     utils::{make_bad_request, make_internal_error, make_js_response, make_json_response, make_not_found},
-    vfs::VfsPath,
 };
 use futures_util::future::BoxFuture;
+use knus::Decode;
 use log::error;
 use macros::callback;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::Serialize;
+use std::str::FromStr;
 use tokio_stream::StreamExt;
 
-#[derive(Serialize)]
-pub struct Component {
-    pub js: VfsPath,
-    pub meta: ComponentMeta,
+#[derive(Decode, Serialize)]
+pub struct HtmlAttr {
+    #[knus(argument, str)]
+    pub name: String,
+    #[knus(argument)]
+    pub value: String,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct ComponentMeta {
+#[derive(Decode, Serialize)]
+#[serde(tag = "type", content = "content", rename_all = "snake_case")]
+pub enum HtmlType {
+    Content(#[knus(argument)] String),
+    Html(Html),
+}
+
+#[derive(Decode, Serialize, Default)]
+pub struct Html {
+    #[knus(argument)]
+    pub element: String,
+    #[knus(children(name = "attr"))]
+    pub attrs: Option<Vec<HtmlAttr>>,
+    #[knus(child, unwrap(children))]
+    pub children: Option<Vec<HtmlType>>,
+}
+
+#[derive(Decode, Serialize, Default)]
+pub enum ComponentPropertyType {
+    #[default]
+    String,
+    Number,
+    Boolean,
+}
+
+impl FromStr for ComponentPropertyType {
+    type Err = Box<dyn std::error::Error + Send + Sync + 'static>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "string" => Ok(ComponentPropertyType::String),
+            "number" => Ok(ComponentPropertyType::Number),
+            "boolean" => Ok(ComponentPropertyType::Boolean),
+            _ => Err("invalid type".into()),
+        }
+    }
+}
+
+#[derive(Decode, Serialize, Default)]
+pub struct ComponentProperty {
+    #[knus(argument)]
     pub name: String,
-    pub title: String,
-    pub html: String,
-    #[serde(default)]
-    pub defaults: HashMap<String, String>,
-    #[serde(default)]
+    #[knus(child, unwrap(argument))]
+    pub lang_key: String,
+    #[knus(child, unwrap(argument))]
+    pub default: Option<String>,
+    #[knus(child, unwrap(argument))]
+    pub max: Option<String>,
+    #[knus(child, unwrap(argument))]
+    pub min: Option<String>,
+    #[knus(type_name)]
+    pub type_name: Option<ComponentPropertyType>,
+}
+
+#[derive(Decode, Serialize, Default)]
+pub struct Component {
+    #[knus(argument)]
+    pub name: String,
+    #[knus(child, unwrap(argument))]
+    pub lang_key: String,
+    #[knus(child)]
+    pub html: Html,
+    #[knus(children(name = "property"))]
     pub properties: Vec<ComponentProperty>,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct ComponentProperty {
-    pub name: String,
-    pub label: String,
-    pub input_type: InputType,
+#[derive(Decode)]
+pub struct Document {
+    #[knus(child)]
+    pub component: Component,
 }
 
-#[derive(Deserialize, Serialize)]
-pub enum InputType {
-    Textarea,
-    Number { min: Option<usize>, max: Option<usize> },
+#[derive(Serialize)]
+pub struct ComponentProperties {
+    pub name: String,
+    pub properties: Vec<ComponentProperty>,
+    pub html: Html,
 }
 
 #[callback]
@@ -52,7 +109,7 @@ pub fn get_component_js(ctx: ApiContext) -> BoxFuture<'static, Response> {
     let comp_name_param = comp_name_param.unwrap();
     let resources = ctx.resources.read().await;
     let comps = match resources.load_components().await {
-        Ok(comps) => comps.filter(|c| c.meta.name == comp_name_param).collect::<Vec<_>>().await,
+        Ok(comps) => comps.filter(|c| c.name == comp_name_param).collect::<Vec<_>>().await,
         Err(err) => {
             error!("unable to load components list because {err}");
             return make_internal_error();
@@ -60,15 +117,8 @@ pub fn get_component_js(ctx: ApiContext) -> BoxFuture<'static, Response> {
     };
 
     if let Some(comp) = comps.first() {
-        let js = match resources.load_component_js(comp).await {
-            Ok(js) => js,
-            Err(err) => {
-                error!("unable to read js of component {} because {err}", comp.meta.name);
-                return make_internal_error();
-            }
-        };
-
-        make_js_response(&js)
+        const JS: &str = "console.log('todo');";
+        make_js_response(JS)
     }
     else {
         make_not_found()
@@ -79,7 +129,16 @@ pub fn get_component_js(ctx: ApiContext) -> BoxFuture<'static, Response> {
 pub fn get_components(ctx: ApiContext) -> BoxFuture<'static, Response> {
     let resources = ctx.resources.read().await;
     let comps = match resources.load_components().await {
-        Ok(comps) => comps.map(|c| c.meta).collect::<Vec<_>>().await,
+        Ok(comps) => {
+            comps
+                .map(|c| ComponentProperties {
+                    name: c.name,
+                    html: c.html,
+                    properties: c.properties,
+                })
+                .collect::<Vec<_>>()
+                .await
+        }
         Err(err) => {
             error!("unable to load components list because {err}");
             return make_internal_error();

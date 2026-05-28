@@ -26,5 +26,5 @@ pub const COMPS_FOLDER: &str = "components";
 pub const DEFAULT_LANG_CODE: &str = "en-US";
 pub const LANG_FOLDER: &str = "lang";
 pub const LANG_META_FILE: &str = "meta.toml";
-pub const COMPS_META_FILE: &str = "meta.ron";
+pub const COMPS_META_FILE: &str = "component.kdl";
 pub const COMPS_JS_FILE: &str = "index.js";

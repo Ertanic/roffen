@@ -1,5 +1,4 @@
-import {ComponentFetchDataContext} from "./component-contexts.ts";
-import {componentsRegistry, get_query} from "./common.ts";
+import {componentsCache, get_query} from "./common.ts";
 
 let hasChanges = false;
 const saveIndicator = document.getElementById("save-indicator");
@@ -49,11 +48,15 @@ function collectContent() {
         const type = block.dataset.type;
         if (!type) return;
 
-        const ctx = new ComponentFetchDataContext(block, data);
-        const comp = componentsRegistry.get(type);
+        const comp = componentsCache.get(type);
 
-        if (comp?.hooks.fetchData) {
-            data = {...data, ...comp.hooks.fetchData(ctx)};
+        if (comp) {
+            const propsData: Record<string, string> = {};
+            for (const prop of comp.properties) {
+                propsData[prop.name] = <string>block.dataset[prop.name] ?? prop.default;
+            }
+
+            data = {...data, ...propsData};
         }
 
         blocks.push({

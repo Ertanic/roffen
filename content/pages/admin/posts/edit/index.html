@@ -24,7 +24,7 @@
             <h4>Components</h4>
 
             {% for name, component in components %}
-            <div class="component" draggable="true" data-type="{{ name }}">{{ component.meta.title }}</div>
+            <div class="component" draggable="true" data-type="{{ name }}">{{ component.name }}</div>
             {% endfor %}
         </aside>
 
@@ -40,27 +40,8 @@
             </div>
             <div class="canvas-grid" id="canvas">
                 {% for comp in post.content %}
-                <div class="grid-block component-{{ comp.name }}" data-type="{{ comp.name }}" draggable="true"
-                    {% for key, val in comp.data %}
-                         {% if not key | eq: "content" %}
-                            data-{{ key }}="{{ val }}"
-                         {% endif %}
-                    {% endfor %}
-                    {% if ?.comp.data?.row | and: ?.comp.data?.col %}
-                        style="grid-row: span {{ comp.data.row }}; grid-column: span {{ comp.data.col }}"
-                    {% else %}
-                        style="grid-row: span 1; grid-column: span 12"
-                    {% endif %}>
-                    {%- if ?.comp.data?.content %}
-                        {% with get_component(comp.name, components) as component %}
-                            <{{ component.meta.html }}>{{ comp.data.content }}</{{ component.meta.html }}>
-                        {% endwith %}
-                    {% else if ?.comp.data?.source %}
-                        {% with get_component(comp.name, components) as component %}
-                            <{{ component.meta.html }} src="{{ comp.data.source }}" />
-                        {% endwith %}
-                    {% endif -%}
-                </div>
+                    <!-- {{ comp.name }} -->
+                    {{ render_component(components, comp.data, comp.name) }}
                 {% endfor %}
 
                 <button id="component-remove">
@@ -81,25 +62,7 @@
     </section>
 </main>
 
-<script>
-    const components = [
-        {%- for name, component in components %}
-        {
-            id: "{{ name }}",
-            path: "/components/js/{{ name }}",
-            html: "{{ component.meta.html }}",
-            title: "{{ component.meta.title }}",
-            data: {
-                {% for key, val in component.meta.defaults -%}
-                "{{ key }}": "{{ val }}",
-                {%- endfor %}
-            },
-        },
-        {%- endfor %}
-    ];
-</script>
-
-<script src="/editor/js/editor.js"></script>
+<script src="/editor/js/index.js"></script>
 
 {% endwith %}
 {% endwith %}

@@ -1,14 +1,7 @@
 import queryString from "node:querystring";
-import type {IComponent} from "common/src/IComponent.ts";
+import type {Component} from "common/src/Component.ts";
 
-export type ComponentInfo = {
-    name: string;
-    html: string;
-    title: string;
-    data: Record<string, any>;
-};
-
-export const componentsRegistry = new Map<string, IComponent>();
+export const componentsCache = new Map<string, Component>();
 
 export const canvas = document.getElementById("canvas");
 export const propertiesBody = document.getElementById("properties-body");

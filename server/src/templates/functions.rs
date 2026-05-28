@@ -9,6 +9,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::{runtime::Handle, sync::RwLock};
 use upon::{Engine, Value};
 use vfs::VfsResult;
+use crate::templates::render::render_component;
 
 pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceManager>>, lang_manager: LangManager) {
     trace!("registering templates functions...");
@@ -58,7 +59,7 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
             tokio::task::block_in_place(|| {
                 let runtime = Handle::current();
                 let result = match runtime.block_on(async { resources.read().await.load_components().await }) {
-                    Ok(comps) => runtime.block_on(async { comps.map(|comp| (comp.meta.name.clone(), comp)).collect::<HashMap<_, _>>().await }),
+                    Ok(comps) => runtime.block_on(async { comps.map(|comp| (comp.name.clone(), comp)).collect::<HashMap<_, _>>().await }),
                     Err(err) => {
                         error!("unable to load components because {err}");
                         return None;
@@ -187,6 +188,8 @@ pub fn register_functions(engine: &mut Engine, resources: Arc<RwLock<ResourceMan
             runtime.block_on(async { lang_manager.try_get_message(key).await })
         })
     });
+
+    engine.add_function("render_component", render_component);
 }
 
 fn posts_to_upon_values(runtime: Handle, stream_result: VfsResult<impl Stream<Item = Post>>) -> Option<Vec<Value>> {

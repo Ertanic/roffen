@@ -1,5 +1,0 @@
-ComponentMeta(
-    name: "quote",
-    title: "Quote",
-    html: "blockquote",
-)

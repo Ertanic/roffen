@@ -225,7 +225,7 @@ Let's try to implement the image component. To do this, create a project with th
 * `index.ts`
 
 ```typescript
-import type {IComponentHooks} from "common/src/IComponent.ts";
+import type {IComponentHooks} from "common/src/Component.ts";
 
 export const hooks: IComponentHooks = {
     mount: ctx => {

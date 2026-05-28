@@ -1,7 +1,7 @@
 import {markDirty} from "./save-content.ts";
-import {canvas, componentsRegistry} from "./common.ts";
-import {ComponentMountContext, ComponentSetSizeContext} from "./component-contexts.ts";
+import {canvas, componentsCache} from "./common.ts";
 import {initProperties} from "./properties.ts";
+import {renderHTML} from "./render.ts";
 
 let dragged: HTMLElement | null = null;
 
@@ -90,35 +90,23 @@ export function initDrag() {
             block.classList.add("grid-block");
             block.dataset.type = type;
 
-            const comp = componentsRegistry.get(type);
+            const comp = componentsCache.get(type);
 
             if (!comp) {
                 console.error("no component found for type: " + type);
                 return;
             }
 
-            const ctx = new ComponentMountContext(block, comp.html, comp.data, comp.title);
+            const {html, state} = renderHTML(comp.html, comp.properties);
+            block.appendChild(html);
 
-            if (comp.hooks.mount) {
-                comp.hooks.mount(ctx);
-            } else {
-                const previewEl = document.createElement(comp.html);
-                previewEl.innerText = comp.data.content ?? comp.title;
-                block.appendChild(previewEl);
-            }
+            block.style.gridColumn = "span 12";
 
-            if (comp.hooks.setSize) {
-                const ctx = new ComponentSetSizeContext(block, comp.data);
-                comp.hooks.setSize(ctx);
-            } else {
-                block.style.gridColumn = "span 12";
-
-                block.dataset.col = "12";
-                block.dataset.row = "1";
-            }
+            block.dataset.col = "12";
+            block.dataset.row = "1";
 
             initBlockDrag(block);
-            initProperties(block, comp);
+            initProperties(block, comp, state);
 
             canvas?.appendChild(block);
 

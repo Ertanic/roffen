@@ -1,1 +1,1 @@
-import './src/IComponent.ts';
+import './src/Component.ts';
