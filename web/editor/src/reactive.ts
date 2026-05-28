@@ -65,17 +65,16 @@ export function initTagBinding(html: ComponentHtml, ref: Ref, state: ReactiveSta
 }
 
 export function initAttributeBindings(html: ComponentHtml, ref: Ref, state: ReactiveState) {
-    for (let key in html.attributes) {
-        const val = html.attributes[key];
-        if (!val) continue;
+    for (const {name, value} of html.attrs ?? []) {
+        if (!value) continue;
 
-        const binding = parseBinding(val, state);
+        const binding = parseBinding(value, state);
         if (binding.type === "content") {
-            ref.current.setAttribute(key, binding.content);
+            ref.current.setAttribute(name, binding.content);
         } else {
-            ref.current.setAttribute(key, binding.content);
+            ref.current.setAttribute(name, binding.content);
             for (const prop of binding.properties ?? []) {
-                state[prop]?.subscribe(v => ref.current.setAttribute(parseBinding(key, state).content, v));
+                state[prop]?.subscribe(v => ref.current.setAttribute(name, parseBinding(value, state).content));
             }
         }
     }
@@ -101,7 +100,7 @@ function walk(
     initTagBinding(html, ref, state, parseBinding(html.element, state));
     initAttributeBindings(html, ref, state);
 
-    html.children.forEach((child, i) => {
+    html.children?.forEach((child, i) => {
         const childRef = {current: ref.current.childNodes[i]! as HTMLElement};
         initChildrenBindings(child, childRef, state);
     });

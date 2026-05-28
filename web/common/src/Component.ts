@@ -17,10 +17,15 @@ export type ComponentHtmlChild = {
     content: ComponentHtml;
 }
 
+export type ComponentHtmlAttr = {
+    name: string;
+    value: string;
+}
+
 export type ComponentHtml = {
     element: string;
-    attributes: Record<string, string>;
-    children: ComponentHtmlChild[];
+    attrs?: ComponentHtmlAttr[];
+    children?: ComponentHtmlChild[];
 };
 
 export type Component = {

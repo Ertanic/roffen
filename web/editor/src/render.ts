@@ -29,7 +29,7 @@ function renderElement(html: ComponentHtml, state: ReactiveState): Node {
         current: element
     };
 
-    const children = html.children.map(child => {
+    const children = (html.children ?? []).map(child => {
         if (child.type === "content") {
             return document.createTextNode(child.content);
         } else {
@@ -39,7 +39,7 @@ function renderElement(html: ComponentHtml, state: ReactiveState): Node {
 
     ref.current.append(...children);
 
-    html.children.forEach((child, i) => initChildrenBindings(child, ref, state))
+    html.children?.forEach((child, i) => initChildrenBindings(child, ref, state))
 
     initAttributeBindings(html, ref, state);
 

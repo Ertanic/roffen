@@ -1,0 +1,13 @@
+component "Image" {
+    lang-key "components-image"
+
+    property "url" {
+        lang-key "components-image-property-url"
+        default "/editor/img/image-placeholder.png"
+    }
+
+    html "img" {
+        attr "class" "component-image"
+        attr "src" "#url"
+    }
+}
