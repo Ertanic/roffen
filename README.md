@@ -136,15 +136,18 @@ Let's talk about the functions that are implemented and registered in the engine
 * `posts(count, offset) -> Post[]` - returns a list of posts.
 * `get_post_by_id(id) -> Post` - returns a post by its ID.
 * `get_pages() -> Page` - returns all pages.
+* `get_components()` - returns all components.
+* `render_component(components, component_data, component_name)` - renders a component.
+* `lang(ftl_key)` - returns a translation by fluent key.
 
 In addition to functions, the following values are passed to templates:
 
 * `auth: Option<JwtPayload>` - authentication status.
 * `query: Map<string, string>` - query parameters.
+* `params: Map<string, string>` - route parameters.
 
 > If you don't have any functions or values in the template engine, you can always manually add them. See
->
-this [file](https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs)
+> this [file](https://github.com/Ertanic/roffen/blob/f60b9db7f066b3ba674662b2263b1770ed2c3ccf/server/src/templates/functions.rs)
 > and the project [build](#build) method.
 
 Let's now look at the fields of structures that are returned from functions and constants.
@@ -186,121 +189,159 @@ struct JwtPayload {
 The engine is somewhat modular, which means that you can write your own components, connect them to the engine, and use
 them in your own articles.
 
-Each module must contain/compile `index.js` and `meta.ron` and be located in the corresponding directory under
-`content/components/`.
+Each module must contain a `component.kdl` file and be located in the corresponding directory in the
+`content/components/` folder.
 
 ```mermaid
 treeView-beta
     "content"
         "components"
             "img"
-                "index.js"
-                "meta.ron"
+                "component.kdl"
             "title"
-                "index.js"
-                "meta.ron"
+                "component.kdl"
             "text"
-                "index.js"
-                "meta.ron"
-```
-
-First, let's explore the component's life cycle. In general, everything is clear here, except for the difference between
-`mount` and `normalize`. The only difference is that `mount` is triggered by a drag event, while `normalize` is
-triggered by page loading and converts the component according to its properties.
-
-```mermaid
-flowchart TD
-    A[mount] --> B[set size]
-    B --> C[normalize]
-    C --> D[init props]
-    D --> E{has changes?}
-    E -->|yes| I[fetch data]
-    I -->|data from props| E
+                "component.kdl"
 ```
 
 ## Implementation
 
-Let's try to implement the image component. To do this, create a project with the following content:
+Let's try to implement the image component. Therefore, I suggest that you first look at the component description
+syntax. The component description is written in [kdl](https://kdl.dev/).
 
-* `index.ts`
+The component description begins with the name of the component itself and the translation key for the component name.
 
-```typescript
-import type {IComponentHooks} from "common/src/Component.ts";
+```kdl
+component "Name" {
+    lang-key "components-name"
+}
+```
 
-export const hooks: IComponentHooks = {
-    mount: ctx => {
-        const previewEl = document.createElement("img");
-        const source = ctx.data.source;
+### Required
 
-        if (!source) {
-            console.error("no source link");
-            return;
-        }
+Next, you must describe the HTML structure of the component. You can use the `html` keyword to describe the HTML
+structure. The next component will generate a `div` with specific classes.
 
-        previewEl.src = source;
+```kdl
+component "Name" {
+    lang-key "components-name"
 
-        ctx.el.classList.add("component-image");
+    html "div" {
+        attr "class" "component-name"
+    }
+}
+```
 
-        ctx.el.appendChild(previewEl);
-    },
-    setSize: ctx => {
-        if (!ctx.data.row || !ctx.data.col) {
-            console.warn("no row or column parameter in component");
-            return;
-        }
+A component can have child components, which can be described using the `children` statement. Let's describe a list
+item. To prevent it from being empty, use the `content` statement inside the `children` section.
 
-        ctx.setRow(Number(ctx.data.row));
-        ctx.setCol(Number(ctx.data.col));
-    },
-    initProps: ctx => {
-        ctx.createUrlSource(
-            "Image url",
-            ctx.data.source ?? (ctx.el.children.item(0) as HTMLImageElement)?.src,
-            value => {
-                const child = ctx.el.children.item(0) as HTMLImageElement;
+```kdl
+component "Name" {
+    lang-key "components-name"
 
-                if (!child) {
-                    console.error("no child element");
-                    return;
+    html "div" {
+        attr "class" "component-name"
+        children {
+            html "ul" {
+                children {
+                    html "li" {
+                        children {
+                            content "First item"
+                        }
+                    }
+                    html "li" {
+                        children {
+                            content "Second item"
+                        }
+                    }
                 }
-
-                if (value) {
-                    child.src = value;
-                    ctx.data.source = value;
-                } else if (ctx.data.source) {
-                    child.src = ctx.data.source;
-                }
-            });
-    },
-    fetchData: ctx => {
-        const child = ctx.el.children.item(0) as HTMLImageElement;
-
-        if (!child) {
-            return {
-                source: "",
-            };
-        } else {
-            return {
-                source: child.src,
             }
         }
     }
 }
 ```
 
-* `meta.ron`
+In general, the component can already be used, but if you need to set a value manually, you can use properties.
+Properties are quite useful on their own, as they allow you to implement reactive interaction with HTML code without
+additional lines of JS code, which can be useful in some cases.
 
-```ron
-ComponentMeta(
-    name: "image",
-    title: "Image",
-    html: "img",
-    defaults: {
-        "source": "/editor/img/image-placeholder.png",
-        "row": "4",
-        "col": "6",
+Using this `#name` or this `#(name)` syntax, you can integrate property values directly into your HTML code. As an
+example, you can use this syntax directly in HTML tags, changing them on the fly, as is done with `h#number`, which will
+result in `h1`.
+
+```kdl
+component "Name" {
+    lang-key "components-name"
+
+    (url)property "url" {
+        lang-key "components-name-property-url"
+        default "/some-url.html"
     }
-)
+
+    (string)property "text" {
+        lang-key "components-name-property-title"
+        default "Some text"
+    }
+
+    (number)property "number" {
+        lang-key "components-name-property-number"
+        default "1"
+        min "1"
+        max "6"
+    }
+
+    html "div" {
+        attr "class" "component-name"
+        children {
+            html "h#number" {
+                children {
+                    content "#text"
+                }
+            }
+            html "ul" {
+                children {
+                    html "li" {
+                        children {
+                            content "First <a href=\"#url\">link</a>"
+                        }
+                    }
+                    html "li" {
+                        children {
+                            content "#text"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### Optional
+
+Optionally, you can specify additional properties for the component container. Yes, the component's HTML code is not
+directly generated in another part of the markup; it is generated within the `div.grid-block`. To interact with this
+block, you can use the `container` statement and reassign some default values.
+
+```kdl
+component "Image" {
+    lang-key "components-image"
+
+    container {
+        row "8"
+        classes "component-image-center-container"
+    }
+
+    (url)property "url" {
+        lang-key "components-image-property-url"
+        default "/editor/img/image-placeholder.png"
+    }
+   
+    html "img" {
+        attr "class" "component-image"
+        attr "src" "#url"
+    }
+}
 ```
 
 Now we can use this component in the editor.
@@ -318,37 +359,35 @@ There are several things you need to do to render components on a page:
 <link rel="stylesheet" href="/view/css/styles.css">
 ```
 
-2. Next, you need to add the following script to your page.
-
-```html
-
-<script src="/view/js/index.js"></script>
-```
-
-3. Finally, you can use components by generating their data containers inside a container with the `.grid-content`
-   class.
+2. Get a list of all the components.
 
 ```handlebars
-<div class="grid-content">
-    {% for comp in post.content %}
-
-    <div data-type="{{ comp.name }}"
-         {% for key, val in comp.data %}
-         data-{{ key }}="{{ val }}"
-         {% endfor %}
-    ></div>
-
-    {% endfor %}
-</div>
+{% with get_components() as components %}
+   <!-- ... -->
+{% endwith %}
 ```
 
-4. To view the results of the script, see the Posts page.
+3. Iterate over the post content.
 
-## Why
+```handlebars
+{% with get_components() as components %}
+   {% for comp in post.content %}
+      <!-- ... -->
+   {% endfor %}
+{% endwith %}
+```
 
-Why such difficulties? At first, I planned to make components using an embedded language, but I quickly abandoned this
-idea because it would have complicated interaction with the DOM tree. Therefore, I had to use native JS/TS scripts to
-give you complete freedom of action.
+4. Call a special function to generate HTML code.
+
+```handlebars
+{% with get_components() as components %}
+   {% for comp in post.content %}
+      {{ render_component(components, comp.data, comp.name) }}
+   {% endfor %}
+{% endwith %}
+```
+
+5. To view the results of the script, see the Posts page.
 
 ---
 

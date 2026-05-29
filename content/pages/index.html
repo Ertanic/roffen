@@ -40,7 +40,7 @@
                 <p>{{ lang("main-page-config-paragraph-1") }}</p>
 
                 <h2>{{ lang("main-page-config-auth") }}</h2>
-                <p>{{ lang("main-page-config-auth-paragraph-2") }}</p>
+                <p>{{ lang("main-page-config-paragraph-2") }}</p>
                 <pre><code class="language-toml">
 [auth]
 secret = "super-secret-key-change-me"
@@ -120,24 +120,24 @@ password = "admin"
                 <ul>
                     <li><code>is_map(val) -> bool</code> - {{ lang("main-page-template-function-1") }}</li>
                     <li><code>len(val) -> i64</code> - {{ lang("main-page-template-function-2") }}</li>
-                    <li><code>date(timestamp, format) -> string</code> - {{ lang("main-page-template-function-3") }}
-                    </li>
+                    <li><code>date(timestamp, format) -> string</code> - {{ lang("main-page-template-function-3") }}</li>
                     <li><code>eq(left, right) -> bool</code> - {{ lang("main-page-template-function-4") }}</li>
                     <li><code>and(first, second) -> bool</code> - {{ lang("main-page-template-function-5") }}</li>
-                    <li><code>default
-                        <T>(val, default) -> T
-                    </code> - {{ lang("main-page-template-function-6") }}
-                    </li>
+                    <li><code>default&lt;T&gt;(val, default) -> T</code> - {{ lang("main-page-template-function-6") }}</li>
                     <li><code>all_posts() -> Post[]</code> - {{ lang("main-page-template-function-7") }}</li>
                     <li><code>posts(count, offset) -> Post[]</code> - {{ lang("main-page-template-function-8") }}</li>
                     <li><code>get_post_by_id(id) -> Post</code> - {{ lang("main-page-template-function-9") }}</li>
                     <li><code>get_pages() -> Page</code> - {{ lang("main-page-template-function-10") }}</li>
+                    <li><code>get_components()</code> - {{ lang("main-page-template-function-11") }}</li>
+                    <li><code>render_component(components, component_data, component_name)</code> - {{ lang("main-page-template-function-12") }}</li>
+                    <li><code>lang(ftl_key)</code> - {{ lang("main-page-template-function-13") }}</li>
                 </ul>
 
                 <p>{{ lang("main-page-template-values") }}</p>
                 <ul>
                     <li><code>auth: Option&lt;JwtPayload&gt;</code> - {{ lang("main-page-template-value-1") }}</li>
                     <li><code>query: Map&lt;string, string&gt;</code> - {{ lang("main-page-template-value-2") }}</li>
+                    <li><code>params: Map&lt;string, string&gt;</code> - {{ lang("main-page-template-value-3") }}</li>
                 </ul>
 
                 <blockquote>
@@ -180,162 +180,206 @@ struct JwtPayload {
                 <h1>{{ lang("main-page-components") }}</h1>
                 <p>{{ lang("main-page-components-paragraph-1") }}</p>
                 <p>{{ lang("main-page-components-paragraph-2") }}</p>
+
                 <pre class="mermaid center">
-                    treeView-beta
-                        "content"
-                            "components"
-                                "img"
-                                    "index.js"
-                                    "meta.ron"
-                                "title"
-                                    "index.js"
-                                    "meta.ron"
-                                "text"
-                                    "index.js"
-                                    "meta.ron"
-                </pre>
-                <p>{{ lang("main-page-components-lifecycle") }}</p>
-                <pre class="mermaid center">
-                    flowchart TD
-                        A[mount] --> B[set size]
-                        B --> C[normalize]
-                        C --> D[init props]
-                        D --> E{has changes?}
-                        E -->|yes| I[fetch data]
-                        I -->|data from props| E
+treeView-beta
+    "content"
+        "components"
+            "img"
+                "component.kdl"
+            "title"
+                "component.kdl"
+            "text"
+                "component.kdl"
                 </pre>
 
                 <h2>{{ lang("main-page-components-implementation") }}</h2>
                 <p>{{ lang("main-page-components-implementation-paragraph") }}</p>
-                <ul>
-                    <li>
-                        <div>
-                            <code>index.ts</code>:
-                            <pre><code class="language-typescript">
-import type {IComponentHooks} from "common/src/Component.ts";
 
-export const hooks: IComponentHooks = {
-    mount: ctx => {
-        const previewEl = document.createElement("img");
-        const source = ctx.data.source;
+                <p>{{ lang("main-page-components-implementation-paragraph-2") }}</p>
 
-        if (!source) {
-            console.error("no source link");
-            return;
-        }
+                <pre><code class="language-kdl">
+component "Name" {
+    lang-key "components-name"
+}
+                </code></pre>
 
-        previewEl.src = source;
+                <h3>{{ lang("main-page-components-required") }}</h3>
 
-        ctx.el.classList.add("component-image");
+                <p>{{ lang("main-page-components-required-paragraph-1") }}</p>
 
-        ctx.el.appendChild(previewEl);
-    },
-    setSize: ctx => {
-        if (!ctx.data.row || !ctx.data.col) {
-            console.warn("no row or column parameter in component");
-            return;
-        }
+                <pre><code class="language-kdl">
+component "Name" {
+    lang-key "components-name"
 
-        ctx.setRow(Number(ctx.data.row));
-        ctx.setCol(Number(ctx.data.col));
-    },
-    initProps: ctx => {
-        ctx.createUrlSource(
-            "Image url",
-            ctx.data.source ?? (ctx.el.children.item(0) as HTMLImageElement)?.src,
-            value => {
-                const child = ctx.el.children.item(0) as HTMLImageElement;
+    html "div" {
+        attr "class" "component-name"
+    }
+}
+                </code></pre>
 
-                if (!child) {
-                    console.error("no child element");
-                    return;
+                <p>{{ lang("main-page-components-required-paragraph-2") }}</p>
+
+                <pre><code class="language-kdl">
+component "Name" {
+    lang-key "components-name"
+
+    html "div" {
+        attr "class" "component-name"
+        children {
+            html "ul" {
+                children {
+                    html "li" {
+                        children {
+                            content "First item"
+                        }
+                    }
+                    html "li" {
+                        children {
+                            content "Second item"
+                        }
+                    }
                 }
-
-                if (value) {
-                    child.src = value;
-                    ctx.data.source = value;
-                } else if (ctx.data.source) {
-                    child.src = ctx.data.source;
-                }
-            });
-    },
-    fetchData: ctx => {
-        const child = ctx.el.children.item(0) as HTMLImageElement;
-
-        if (!child) {
-            return {
-                source: "",
-            };
-        } else {
-            return {
-                source: child.src,
             }
         }
     }
 }
-                            </code></pre>
-                        </div>
-                    </li>
-                    <li>
-                        <div>
-                            <code>meta.ron</code>
-                            <pre><code class="language-rust">
-ComponentMeta(
-    name: "image",
-    title: "Image",
-    html: "img",
-    defaults: {
-        "source": "/editor/img/image-placeholder.png",
-        "row": "4",
-        "col": "6",
+                </code></pre>
+
+                <p>{{ lang("main-page-components-properties") }}</p>
+
+                <p>{{ lang("main-page-components-required-paragraph-3") }}</p>
+
+                <pre><code class="language-kdl">
+component "Name" {
+    lang-key "components-name"
+
+    (url)property "url" {
+        lang-key "components-name-property-url"
+        default "/some-url.html"
     }
-)
-                            </code></pre>
-                        </div>
-                    </li>
-                </ul>
+
+    (string)property "text" {
+        lang-key "components-name-property-title"
+        default "Some text"
+    }
+
+    (number)property "number" {
+        lang-key "components-name-property-number"
+        default "1"
+        min "1"
+        max "6"
+    }
+
+    html "div" {
+        attr "class" "component-name"
+        children {
+            html "h#number" {
+                children {
+                    content "#text"
+                }
+            }
+
+            html "ul" {
+                children {
+                    html "li" {
+                        children {
+                            content "First <a href=\"#url\">link</a>"
+                        }
+                    }
+
+                    html "li" {
+                        children {
+                            content "#text"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+                </code></pre>
+
+                <h3>{{ lang("main-page-components-optional") }}</h3>
+
+                <p>{{ lang("main-page-components-optional-paragraph") }}</p>
+
+                <pre><code class="language-kdl">
+component "Image" {
+    lang-key "components-image"
+
+    container {
+        row "8"
+        classes "component-image-center-container"
+    }
+
+    (url)property "url" {
+        lang-key "components-image-property-url"
+        default "/editor/img/image-placeholder.png"
+    }
+
+    html "img" {
+        attr "class" "component-image"
+        attr "src" "#url"
+    }
+}
+                </code></pre>
 
                 <p>{{ lang("main-page-components-use") }}</p>
+
                 <img src="/examples/img_component.png" alt="img component">
 
                 <h2>{{ lang("main-page-components-rendering") }}</h2>
+
                 <p>{{ lang("main-page-components-rendering-paragraph") }}</p>
+
                 <ol>
                     <li>
                         <p>{{ lang("main-page-components-rendering-step-1") }}</p>
+
                         <pre><code class="language-html">
 &lt;link rel="stylesheet" href="/view/css/styles.css"&gt;
                         </code></pre>
                     </li>
+
                     <li>
                         <p>{{ lang("main-page-components-rendering-step-2") }}</p>
-                        <pre><code class="language-html">
-&lt;script src="/view/js/index.js"&gt;&lt;/script&gt;
+
+                        <pre><code class="language-handlebars">
+{&percnt; with get_components() as components &percnt;}
+                            <!-- ... -->
+{&percnt; endwith &percnt;}
                         </code></pre>
                     </li>
+
                     <li>
                         <p>{{ lang("main-page-components-rendering-step-3") }}</p>
+
                         <pre><code class="language-handlebars">
-&lt;div class="grid-content"&gt;
-    {&percnt; for comp in post.content &percnt;}
-
-    &lt;div data-type="{&#123; comp.name &#125;}"
-         {&percnt; for key, val in comp.data &percnt;}
-         data-{&#123; key &#125;}="{&#123; val &#125;}"
-         {&percnt; endfor &percnt;}
-    &gt;&lt;/div&gt;
-
-    {&percnt; endfor &percnt;}
-&lt;/div&gt;
+{&percnt; with get_components() as components &percnt;}
+   {&percnt; for comp in post.content &percnt;}
+                            <!-- ... -->
+   {&percnt; endfor &percnt;}
+{&percnt; endwith &percnt;}
                         </code></pre>
                     </li>
+
                     <li>
                         <p>{{ lang("main-page-components-rendering-step-4") }}</p>
+
+                        <pre><code class="language-handlebars">
+{&percnt; with get_components() as components &percnt;}
+   {&percnt; for comp in post.content &percnt;}
+      {&#123; render_component(components, comp.data, comp.name) &#125;}
+   {&percnt; endfor &percnt;}
+{&percnt; endwith &percnt;}
+                        </code></pre>
+                    </li>
+
+                    <li>
+                        <p>{{ lang("main-page-components-rendering-step-5") }}</p>
                     </li>
                 </ol>
-
-                <h2>{{ lang("main-page-components-why") }}</h2>
-                <p>{{ lang("main-page-components-why-paragraph") }}</p>
             </article>
 
             <article>

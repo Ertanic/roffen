@@ -6,6 +6,7 @@ import markdown from 'highlight.js/lib/languages/markdown';
 import powershell from 'highlight.js/lib/languages/powershell';
 import toml from 'highlight.js/lib/languages/ini';
 import handlebars from 'highlight.js/lib/languages/handlebars';
+import clojure from 'highlight.js/lib/languages/clojure';
 import mermaid from 'mermaid';
 
 hljs.registerLanguage('rust', rust);
@@ -14,6 +15,7 @@ hljs.registerLanguage('html', markdown);
 hljs.registerLanguage('handlebars', handlebars);
 hljs.registerLanguage('powershell', powershell);
 hljs.registerLanguage('toml', toml);
+hljs.registerLanguage('kdl', clojure);
 
 hljs.highlightAll();
 
