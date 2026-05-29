@@ -37,8 +37,6 @@ export function initProperties(block: HTMLDivElement, comp: Component | null = n
             initReactiveHTML(comp.html, state, block);
         }
 
-        console.log("state: ", state);
-
         for (const prop of comp.properties) {
             switch (prop.type_name) {
                 case "Number":
@@ -56,6 +54,7 @@ export function initProperties(block: HTMLDivElement, comp: Component | null = n
                     )
                     break;
                 case null:
+                case undefined:
                 case "String":
                     createText(
                         propertiesBody,

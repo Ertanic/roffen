@@ -1,0 +1,14 @@
+component "Quote" {
+    lang-key "components-quote"
+
+    property "content" {
+        lang-key "components-quote-property-content"
+        default "quote"
+    }
+
+    html "blockquote" {
+        children {
+            content "#content"
+        }
+    }
+}
