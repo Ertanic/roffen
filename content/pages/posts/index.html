@@ -25,13 +25,7 @@
             </header>
             <main class="grid-content">
                 {% for comp in post.content | take: 2 %}
-
-                <div data-type="{{ comp.name }}"
-                     {% for key, val in comp.data %}
-                     data-{{ key }}="{{ val }}"
-                     {% endfor %}
-                ></div>
-
+                    {{ render_component(get_components(), comp.data, comp.name) }}
                 {% endfor %}
             </main>
             <footer>

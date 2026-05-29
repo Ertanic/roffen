@@ -45,11 +45,7 @@
             <main class="grid-content">
                 {% for comp in post.content %}
 
-                <div data-type="{{ comp.name }}"
-                     {% for key, val in comp.data %}
-                     data-{{ key }}="{{ val }}"
-                     {% endfor %}
-                ></div>
+                {{ render_component(get_components(), comp.data, comp.name) }}
 
                 {% endfor %}
             </main>
