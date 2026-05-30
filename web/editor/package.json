@@ -10,8 +10,8 @@
     "typescript": "^6.0.3"
   },
   "scripts": {
-    "build": "bun build --outdir out ./index.ts",
-    "build-prod": "bun build --outdir out ./index.ts --production"
+    "build": "bun install && bun build --outdir out ./index.ts",
+    "build-prod": "bun install && bun build --outdir out ./index.ts --production"
   },
   "dependencies": {
     "@reactivex/rxjs": "^6.6.7",
